@@ -1,0 +1,11 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+
+# Environments
+.env
+.venv/
+env/
+
+# Local configuration (Do not upload local paths)
+config.json
