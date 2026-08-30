@@ -49,22 +49,26 @@ class MonitoringDaemon:
         self.running = False
 
     def _lock_target_windows(self):
-        """Scans the OS and stores the HWNDs of all windows matching the target titles."""
-        self.locked_hwnds.clear()
-        
-        def callback(hwnd, extra):
-            # Only look at windows that actually have a title
-            title = win32gui.GetWindowText(hwnd).strip().lower()
-            if title:
-                for target in self.target_window_titles:
-                    if target in title:
-                        # Save the unique HWND and its exact original title
-                        self.locked_hwnds[hwnd] = win32gui.GetWindowText(hwnd)
-        
-        if self.target_window_titles:
-            win32gui.EnumWindows(callback, None)
+            """Scans the OS and stores the HWNDs of all VISIBLE windows matching the target titles."""
+            self.locked_hwnds.clear()
             
-        print(f"DEBUG: Locked onto {len(self.locked_hwnds)} target windows.")
+            def callback(hwnd, extra):
+                # NEW: Filter out hidden/invisible background worker windows
+                if not win32gui.IsWindowVisible(hwnd):
+                    return
+                    
+                # Only look at windows that actually have a title
+                title = win32gui.GetWindowText(hwnd).strip().lower()
+                if title:
+                    for target in self.target_window_titles:
+                        if target in title:
+                            # Save the unique HWND and its exact original title
+                            self.locked_hwnds[hwnd] = win32gui.GetWindowText(hwnd)
+            
+            if self.target_window_titles:
+                win32gui.EnumWindows(callback, None)
+                
+            print(f"DEBUG: Locked onto {len(self.locked_hwnds)} target windows.")
 
     def _monitor_loop(self):
         """The core loop. Sleeps for 60 seconds between checks."""
