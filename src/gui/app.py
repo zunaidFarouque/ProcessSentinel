@@ -1,8 +1,10 @@
+import threading
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, filedialog
 import customtkinter as ctk
 
 from channels import ChannelRegistry, NotificationChannel
+from config_manager import ConfigManager, CONFIG_FILE
 from engine import MonitorEngine
 from monitors.base import BaseMonitor
 from gui.dialogs import ChannelDialog, MonitorDialog
@@ -42,15 +44,17 @@ class SentinelGUI:
 
         # Engine Status & Controls
         ctrl_frame = ctk.CTkFrame(header, fg_color="transparent")
-        ctrl_frame.pack(side="right", padx=20, pady=10)
+        ctrl_frame.pack(side="right", padx=15, pady=10)
 
         self.engine_status_lbl = ctk.CTkLabel(ctrl_frame, text="● IDLE", font=("Segoe UI", 13, "bold"), text_color="gray60")
-        self.engine_status_lbl.pack(side="left", padx=15)
+        self.engine_status_lbl.pack(side="left", padx=10)
 
-        self.btn_toggle_engine = ctk.CTkButton(ctrl_frame, text="▶ START ENGINE", command=self._toggle_engine, width=140, fg_color="#1f6aa5")
-        self.btn_toggle_engine.pack(side="left", padx=5)
+        self.btn_toggle_engine = ctk.CTkButton(ctrl_frame, text="▶ START ENGINE", command=self._toggle_engine, width=130, fg_color="#1f6aa5")
+        self.btn_toggle_engine.pack(side="left", padx=4)
 
-        ctk.CTkButton(ctrl_frame, text="💾 Save Config", command=self._save_config, width=100, fg_color="#2b8a3e").pack(side="left", padx=5)
+        ctk.CTkButton(ctrl_frame, text="📥 Import", command=self._import_config, width=80, fg_color="#495057", hover_color="#5a6268").pack(side="left", padx=3)
+        ctk.CTkButton(ctrl_frame, text="📤 Export", command=self._export_config, width=80, fg_color="#364fc7", hover_color="#4263eb").pack(side="left", padx=3)
+        ctk.CTkButton(ctrl_frame, text="💾 Save", command=self._save_config, width=75, fg_color="#2b8a3e", hover_color="#2f9e44").pack(side="left", padx=3)
 
         # Main Tabview
         self.tabview = ctk.CTkTabview(self.root, corner_radius=8)
@@ -139,15 +143,21 @@ class SentinelGUI:
         act_row = ctk.CTkFrame(card, fg_color="transparent")
         act_row.pack(fill="x", padx=12, pady=(0, 10))
 
-        def on_reset():
+        btn_reset = ctk.CTkButton(act_row, text="↺ Reset State", width=100, height=26, fg_color="#3d3d3d", hover_color="#505050")
+        def on_reset(button=btn_reset):
             self.engine.reset_monitor(mon.id)
+            button.configure(text="Reset!", fg_color="#2b8a3e")
+            self.root.after(800, lambda: button.configure(text="↺ Reset State", fg_color="#3d3d3d"))
             self._refresh_monitors_list()
-        btn_reset = ctk.CTkButton(act_row, text="↺ Reset State", width=100, height=26, fg_color="#3d3d3d", hover_color="#505050", command=on_reset)
+        btn_reset.configure(command=on_reset)
         btn_reset.pack(side="left", padx=(0, 6))
 
-        def on_check():
+        btn_check = ctk.CTkButton(act_row, text="⚡ Check", width=75, height=26, fg_color="#3d3d3d", hover_color="#505050")
+        def on_check(button=btn_check):
+            button.configure(text="Checking...", state="disabled")
             self.engine.check_monitor_now(mon.id)
-        btn_check = ctk.CTkButton(act_row, text="⚡ Check", width=75, height=26, fg_color="#3d3d3d", hover_color="#505050", command=on_check)
+            self.root.after(1200, lambda: button.configure(text="⚡ Check", state="normal"))
+        btn_check.configure(command=on_check)
         btn_check.pack(side="left", padx=4)
 
         def on_edit():
@@ -202,13 +212,22 @@ class SentinelGUI:
                     self._refresh_monitors_list()
                 ctk.CTkButton(btn_frame, text="Set Default", width=95, height=28, fg_color="#3d3d3d", command=make_def).pack(side="left", padx=4)
 
-            def test_ch(channel=ch):
-                ok = channel.send("Test notification from ProcessSentinel 2.0!", "Channel Test", "white_check_mark", 3)
-                if ok:
-                    messagebox.showinfo("Success", f"Test notification delivered to '{channel.name}'!")
-                else:
-                    messagebox.showerror("Error", f"Failed sending to {channel.url}. Check URL or network.")
-            ctk.CTkButton(btn_frame, text="⚡ Test Alert", width=95, height=28, fg_color="#1f6aa5", command=test_ch).pack(side="left", padx=4)
+            btn_test = ctk.CTkButton(btn_frame, text="⚡ Test Alert", width=95, height=28, fg_color="#1f6aa5")
+            def on_test_click(channel=ch, button=btn_test):
+                button.configure(text="Sending...", state="disabled", fg_color="#d97706")
+                def worker():
+                    ok = channel.send("Test notification from ProcessSentinel 2.0!", "Channel Test", "white_check_mark", 3)
+                    def on_finish():
+                        button.configure(text="⚡ Test Alert", state="normal", fg_color="#1f6aa5")
+                        if ok:
+                            messagebox.showinfo("Success", f"Test notification delivered to '{channel.name}'!")
+                        else:
+                            messagebox.showerror("Error", f"Failed sending to {channel.url}.\nCheck topic URL or network connection.")
+                    self.root.after(0, on_finish)
+                threading.Thread(target=worker, daemon=True).start()
+
+            btn_test.configure(command=on_test_click)
+            btn_test.pack(side="left", padx=4)
 
             def edit_ch(channel=ch):
                 self._open_edit_channel_dialog(channel)
@@ -261,6 +280,50 @@ class SentinelGUI:
             messagebox.showinfo("Config Saved", "Configuration successfully saved to config.json!")
         else:
             messagebox.showerror("Save Error", "Failed to write config.json.")
+
+    def _export_config(self):
+        filepath = filedialog.asksaveasfilename(
+            title="Export Configuration",
+            defaultextension=".json",
+            filetypes=[("JSON Configuration Files", "*.json"), ("All Files", "*.*")],
+            initialfile="process_sentinel_backup.json"
+        )
+        if not filepath:
+            return
+        ok = ConfigManager.save_config(self.channel_registry, self.engine.monitors, filepath=filepath)
+        if ok:
+            messagebox.showinfo("Export Successful", f"Configuration exported to:\n{filepath}")
+            self.engine.log(f"Exported configuration to {filepath}")
+        else:
+            messagebox.showerror("Export Failed", "Could not write configuration to destination file.")
+
+    def _import_config(self):
+        filepath = filedialog.askopenfilename(
+            title="Import Configuration",
+            filetypes=[("JSON Configuration Files", "*.json"), ("All Files", "*.*")]
+        )
+        if not filepath:
+            return
+
+        if not messagebox.askyesno("Confirm Import", "Importing will replace currently loaded channels and monitors with the imported file.\n\nDo you want to continue?"):
+            return
+
+        try:
+            new_registry, new_monitors = ConfigManager.load_config(filepath=filepath)
+            self.channel_registry = new_registry
+            self.engine.channel_registry = new_registry
+            with self.engine._lock:
+                self.engine.monitors = new_monitors
+
+            # Auto-save to active default config.json
+            self.save_callback()
+
+            self._refresh_channels_list()
+            self._refresh_monitors_list()
+            self.engine.log(f"Imported configuration from {filepath}")
+            messagebox.showinfo("Import Successful", f"Imported {len(new_monitors)} monitor(s) and {len(new_registry.channels)} channel(s) successfully!")
+        except Exception as e:
+            messagebox.showerror("Import Error", f"Failed importing configuration:\n{e}")
 
     def _open_add_monitor_dialog(self):
         def on_save(new_mon):
