@@ -13,6 +13,33 @@ This guide walks you through setting up and running ProcessSentinel on Windows, 
 
 ---
 
+## 📥 Installation Options
+
+### Method 1: Install via Scoop (Recommended)
+If you use [Scoop](https://scoop.sh):
+
+```powershell
+# Add the bucket
+scoop bucket add zunaid https://github.com/zunaidFarouque/Zunaid-Scoop-Bucket
+
+# Install ProcessSentinel
+scoop install processsentinel
+```
+
+Or install directly from the manifest URL:
+```powershell
+scoop install https://raw.githubusercontent.com/zunaidFarouque/ProcessSentinel/main/processsentinel.json
+```
+
+> [!NOTE]
+> The Scoop manifest automatically persists `config.json`, creates a Windows Start Menu shortcut, and provides a terminal shim (`processsentinel`).
+
+### Method 2: Standalone Portable Binary (Zero Install)
+1. Download **`ProcessSentinel-v2.0.0-windows-x64.zip`** from [GitHub Releases](https://github.com/zunaidFarouque/ProcessSentinel/releases/latest).
+2. Extract anywhere and launch `ProcessSentinel.exe`.
+
+---
+
 ## 📦 Portable Architecture & Folder Structure
 
 ProcessSentinel was designed from the ground up to be **100% portable**. You can copy the folder to any directory, run it from a USB flash drive, or place it on a network share without running any installers or modifying Windows registry keys.

@@ -45,6 +45,35 @@ Comprehensive documentation is available in the [`docs/`](docs/index.md) directo
 
 ## Installation & Setup
 
+### Option 1: Install via Scoop (Recommended)
+
+If you use the [Scoop](https://scoop.sh) Windows package manager:
+
+```powershell
+# Add the bucket
+scoop bucket add zunaid https://github.com/zunaidFarouque/Zunaid-Scoop-Bucket
+
+# Install ProcessSentinel
+scoop install processsentinel
+```
+
+Or install directly from the manifest URL without subscribing to a bucket:
+```powershell
+scoop install https://raw.githubusercontent.com/zunaidFarouque/ProcessSentinel/main/processsentinel.json
+```
+
+---
+
+### Option 2: Standalone Portable Binary (Zero Install)
+
+1. Download **`ProcessSentinel-v2.0.0-windows-x64.zip`** from the [Latest Release](https://github.com/zunaidFarouque/ProcessSentinel/releases/latest).
+2. Extract the folder anywhere (e.g. `C:\Tools\ProcessSentinel` or a USB drive).
+3. Double-click **`ProcessSentinel.exe`** to start.
+
+---
+
+### Option 3: Run from Python Source (Developers)
+
 1. **Clone the Repository**:
    ```bash
    git clone https://github.com/zunaidFarouque/ProcessSentinel.git
