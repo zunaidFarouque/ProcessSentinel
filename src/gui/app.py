@@ -1,6 +1,8 @@
+import os
 import threading
 import tkinter as tk
 from tkinter import messagebox, filedialog
+import webbrowser
 import customtkinter as ctk
 
 from channels import ChannelRegistry, NotificationChannel
@@ -55,6 +57,7 @@ class SentinelGUI:
         ctk.CTkButton(ctrl_frame, text="📥 Import", command=self._import_config, width=80, fg_color="#495057", hover_color="#5a6268").pack(side="left", padx=3)
         ctk.CTkButton(ctrl_frame, text="📤 Export", command=self._export_config, width=80, fg_color="#364fc7", hover_color="#4263eb").pack(side="left", padx=3)
         ctk.CTkButton(ctrl_frame, text="💾 Save", command=self._save_config, width=75, fg_color="#2b8a3e", hover_color="#2f9e44").pack(side="left", padx=3)
+        ctk.CTkButton(ctrl_frame, text="❓ Help", command=self._open_help, width=75, fg_color="#099268", hover_color="#0ca678").pack(side="left", padx=3)
 
         # Main Tabview
         self.tabview = ctk.CTkTabview(self.root, corner_radius=8)
@@ -324,6 +327,14 @@ class SentinelGUI:
             messagebox.showinfo("Import Successful", f"Imported {len(new_monitors)} monitor(s) and {len(new_registry.channels)} channel(s) successfully!")
         except Exception as e:
             messagebox.showerror("Import Error", f"Failed importing configuration:\n{e}")
+
+    def _open_help(self):
+        """Open the ProcessSentinel documentation in the default web browser."""
+        url = "https://github.com/zunaidFarouque/ProcessSentinel/blob/main/docs/index.md"
+        try:
+            webbrowser.open(url)
+        except Exception as e:
+            messagebox.showerror("Help Error", f"Unable to open help in browser:\n{e}")
 
     def _open_add_monitor_dialog(self):
         def on_save(new_mon):

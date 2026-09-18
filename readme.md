@@ -6,6 +6,20 @@ Built with **CustomTkinter** and powered by an asynchronous monitoring daemon, i
 
 ---
 
+## 📚 Documentation & User Guides
+
+Comprehensive documentation is available in the [`docs/`](docs/index.md) directory:
+
+* 📖 **[Documentation Home & Index](docs/index.md)** — Architecture overview and navigation hub.
+* 🚀 **[Getting Started & Portable Setup](docs/getting-started.md)** — Portable executable layout, self-healing config, and UI walkthrough.
+* 📱 **[Mobile Push Notifications Setup](docs/mobile-setup.md)** — Android & iOS app links, ntfy.sh setup, and alert testing.
+* 🎛️ **[Complete Monitors Guide & Reference](docs/monitors-guide.md)** — Detailed parameters, operational logic, and settings for all 8 monitors.
+* 📡 **[Channels & Alert Routing](docs/channels-and-routing.md)** — Managing topic aliases, defaults, priority mappings, and overrides.
+* 💡 **[Real-World Use Cases & Cookbooks](docs/use-cases.md)** — Recipes for 3D renders, deep learning, GIS pipelines, and databases.
+* ⚙️ **[Configuration & Backup Guide](docs/configuration.md)** — JSON schema, automatic quarantine, and import/export.
+
+---
+
 ## Key Features
 
 ### 1. Flexible Multi-Channel Routing
