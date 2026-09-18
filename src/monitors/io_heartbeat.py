@@ -23,9 +23,25 @@ class IOMonitor(BaseMonitor):
         interval_seconds: int = 60,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "warning,hourglass_done",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.paths = [p.strip() for p in paths if p.strip()]
         self.filters = [f.strip().lower() for f in (filters or ["*.*"]) if f.strip()]
         self.stall_minutes = max(1.0, float(stall_minutes))
@@ -75,12 +91,15 @@ class IOMonitor(BaseMonitor):
         if mins_idle > self.stall_minutes:
             if not self.stalled_warned:
                 msg = self.message.format(stall_mins=mins_idle)
+                title = self.format_title(f"{self.name}: I/O Stalled", stall_mins=mins_idle)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: I/O Stalled",
-                    tags="warning,hourglass_done",
-                    priority=4
+                    title=title,
+                    tags=self.tags,
+                    priority=self.priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.stalled_warned = True
             self.status_text = f"STALLED: Inactive for {mins_idle:.1f} mins (> {self.stall_minutes:.0f}m)"
@@ -116,5 +135,10 @@ class IOMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 60),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", "warning,hourglass_done"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )

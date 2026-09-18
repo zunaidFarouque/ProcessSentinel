@@ -112,6 +112,15 @@ class SentinelGUI:
         badge = ctk.CTkLabel(h_row, text=f" {mon.display_name} ", fg_color="#184e77", corner_radius=5, font=("Segoe UI", 10, "bold"))
         badge.pack(side="left")
 
+        if mon.monitor_type == "StorageMultiTier":
+            prio_badge = ctk.CTkLabel(h_row, text=" MULTI-TIER ", fg_color="#6f42c1", corner_radius=5, font=("Segoe UI", 9, "bold"))
+            prio_badge.pack(side="left", padx=5)
+        else:
+            prio_color = "#d90429" if mon.priority == 5 else "#f77f00" if mon.priority == 4 else "#1f6aa5" if mon.priority == 3 else "#495057"
+            prio_name = "URGENT (5)" if mon.priority == 5 else "HIGH (4)" if mon.priority == 4 else "NORMAL (3)" if mon.priority == 3 else "LOW (2)"
+            prio_badge = ctk.CTkLabel(h_row, text=f" {prio_name} ", fg_color=prio_color, corner_radius=5, font=("Segoe UI", 9, "bold"))
+            prio_badge.pack(side="left", padx=5)
+
         name_lbl = ctk.CTkLabel(h_row, text=f"  {mon.name}", font=("Segoe UI", 14, "bold"))
         name_lbl.pack(side="left")
 
@@ -131,7 +140,10 @@ class SentinelGUI:
         target_chan = self.channel_registry.get_channel(mon.channel_id)
         is_default = (mon.channel_id is None or mon.channel_id == self.channel_registry.default_channel_id)
         chan_text = f"📡 {target_chan.name}" + (" [Default]" if is_default else "")
-        ctk.CTkLabel(m_row, text=chan_text, font=("Segoe UI", 11), text_color="gray60").pack(side="left")
+        ctk.CTkLabel(m_row, text=chan_text, font=("Segoe UI", 11), text_color="gray60").pack(side="left", padx=(0, 15))
+
+        if mon.tags:
+            ctk.CTkLabel(m_row, text=f"🏷 {mon.tags}", font=("Segoe UI", 11), text_color="gray60").pack(side="left")
 
         # Status Row
         s_row = ctk.CTkFrame(card, fg_color="transparent")
@@ -201,6 +213,8 @@ class SentinelGUI:
 
             is_default = (ch.id == self.channel_registry.default_channel_id)
             title_text = ch.name + ("  [PRIMARY DEFAULT]" if is_default else "")
+            if ch.auth_token:
+                title_text += "  [🔒 Token Protected]"
             title_color = "#38b000" if is_default else "white"
             ctk.CTkLabel(info_frame, text=title_text, font=("Segoe UI", 13, "bold"), text_color=title_color).pack(anchor="w")
             ctk.CTkLabel(info_frame, text=ch.url, font=("Segoe UI", 11), text_color="gray60").pack(anchor="w")
@@ -352,16 +366,17 @@ class SentinelGUI:
         MonitorDialog(self.root, self.channel_registry, monitor=mon, on_save=on_save)
 
     def _open_add_channel_dialog(self):
-        def on_save(name, url, _):
-            self.channel_registry.add_channel(name, url)
+        def on_save(name, url, token, _):
+            self.channel_registry.add_channel(name, url, auth_token=token)
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=None, on_save=on_save)
 
     def _open_edit_channel_dialog(self, channel: NotificationChannel):
-        def on_save(name, url, cid):
+        def on_save(name, url, token, cid):
             channel.name = name
             channel.url = url
+            channel.auth_token = token
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=channel, on_save=on_save)

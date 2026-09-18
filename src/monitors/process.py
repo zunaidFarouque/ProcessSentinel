@@ -33,9 +33,27 @@ class ProcessStepDownMonitor(BaseMonitor):
         channel_id: Optional[str] = None,
         enabled: bool = True,
         monitor_id: Optional[str] = None,
-        alerted_counts: Optional[List[int]] = None
+        alerted_counts: Optional[List[int]] = None,
+        priority: int = 5,
+        tags: str = "skull,rotating_light",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True,
+        step_down_priority: int = 4,
+        step_down_tags: str = "warning,arrow_down"
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.target = target.strip()
         self.initial_count = max(1, int(initial_count))
         self.match_mode = match_mode
@@ -43,6 +61,8 @@ class ProcessStepDownMonitor(BaseMonitor):
         self.critical_message = critical_message
         self.alerted_counts: Set[int] = set(alerted_counts or [])
         self.last_observed_count: Optional[int] = None
+        self.step_down_priority = int(step_down_priority)
+        self.step_down_tags = (step_down_tags or "").strip()
 
     def _get_current_count(self) -> int:
         target_lower = self.target.lower()
@@ -78,12 +98,15 @@ class ProcessStepDownMonitor(BaseMonitor):
         if current_count == 0:
             if 0 not in self.alerted_counts:
                 msg = self.critical_message.format(target=self.target, count=0)
+                title = self.format_title(f"{self.name}: All Closed", target=self.target, count=0)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: All Closed",
-                    tags="skull,rotating_light",
-                    priority=5
+                    title=title,
+                    tags=self.tags,
+                    priority=self.priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted_counts.add(0)
             self.status_text = f"CRITICAL: 0 instances active (All closed!)"
@@ -91,12 +114,15 @@ class ProcessStepDownMonitor(BaseMonitor):
         else:
             if current_count not in self.alerted_counts:
                 msg = self.step_down_message.format(target=self.target, count=current_count)
+                title = self.format_title(f"{self.name}: Step-Down Alert", target=self.target, count=current_count)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: Step-Down Alert",
-                    tags="warning,arrow_down",
-                    priority=4
+                    title=title,
+                    tags=self.step_down_tags,
+                    priority=self.step_down_priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted_counts.add(current_count)
             self.status_text = f"Warning: {current_count}/{self.initial_count} instances active"
@@ -115,7 +141,9 @@ class ProcessStepDownMonitor(BaseMonitor):
             "match_mode": self.match_mode,
             "step_down_message": self.step_down_message,
             "critical_message": self.critical_message,
-            "alerted_counts": list(self.alerted_counts)
+            "alerted_counts": list(self.alerted_counts),
+            "step_down_priority": self.step_down_priority,
+            "step_down_tags": self.step_down_tags
         })
         return data
 
@@ -132,7 +160,14 @@ class ProcessStepDownMonitor(BaseMonitor):
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
             monitor_id=data.get("id"),
-            alerted_counts=data.get("alerted_counts", [])
+            alerted_counts=data.get("alerted_counts", []),
+            priority=data.get("priority", 5),
+            tags=data.get("tags", "skull,rotating_light"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True),
+            step_down_priority=data.get("step_down_priority", 4),
+            step_down_tags=data.get("step_down_tags", "warning,arrow_down")
         )
 
 
@@ -152,9 +187,25 @@ class ProcessInstanceMonitor(BaseMonitor):
         interval_seconds: int = 60,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "warning,gear",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.target = target.strip()
         self.condition = condition
         self.threshold = int(threshold)
@@ -197,12 +248,15 @@ class ProcessInstanceMonitor(BaseMonitor):
         if triggered:
             if not self.alerted:
                 msg = self.message.format(target=self.target, count=count, threshold=self.threshold)
+                title = self.format_title(f"{self.name}: Instance Alert", target=self.target, count=count, threshold=self.threshold)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: Instance Alert",
-                    tags="warning,gear",
-                    priority=4
+                    title=title,
+                    tags=self.tags,
+                    priority=self.priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted = True
             self.status_text = f"Triggered: {count} instances ({self.condition} {self.threshold})"
@@ -240,5 +294,10 @@ class ProcessInstanceMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 60),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", "warning,gear"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )

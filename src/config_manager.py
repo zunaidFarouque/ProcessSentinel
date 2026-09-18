@@ -106,9 +106,9 @@ class ConfigManager:
                 name="Primary C: Drive",
                 drive="C:\\",
                 tiers=[
-                    {"gb": 30.0, "message": "Storage Warning: {free_gb:.1f} GB left on {drive}", "tag": "warning", "level": "warning", "channel_id": None},
-                    {"gb": 20.0, "message": "Critical Warning: {free_gb:.1f} GB left on {drive}!", "tag": "rotating_light", "level": "critical", "channel_id": None},
-                    {"gb": 10.0, "message": "FATAL: {free_gb:.1f} GB left on {drive}! Imminent disk exhaustion!", "tag": "skull,fire", "level": "critical", "channel_id": None}
+                    {"gb": 30.0, "message": "Storage Warning: {free_gb:.1f} GB left on {drive}", "tag": "warning", "level": "warning", "priority": 3, "channel_id": None},
+                    {"gb": 20.0, "message": "Critical Warning: {free_gb:.1f} GB left on {drive}!", "tag": "rotating_light", "level": "critical", "priority": 4, "channel_id": None},
+                    {"gb": 10.0, "message": "FATAL: {free_gb:.1f} GB left on {drive}! Imminent disk exhaustion!", "tag": "skull,fire", "level": "critical", "priority": 5, "channel_id": None}
                 ],
                 interval_seconds=120
             ),

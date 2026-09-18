@@ -13,13 +13,16 @@ class MockChannelRegistry(ChannelRegistry):
         super().__init__()
         self.sent_alerts = []
 
-    def send_alert(self, channel_id=None, message="", title="Alert", tags="", priority=3):
+    def send_alert(self, channel_id=None, message="", title="Alert", tags="", priority=3, click_url=None, markdown=True, actions=None, **kwargs):
         self.sent_alerts.append({
             "channel_id": channel_id,
             "message": message,
             "title": title,
             "tags": tags,
-            "priority": priority
+            "priority": priority,
+            "click_url": click_url,
+            "markdown": markdown,
+            "actions": actions
         })
         return True
 

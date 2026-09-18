@@ -22,9 +22,25 @@ class ResourceMonitor(BaseMonitor):
         interval_seconds: int = 60,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.target = target.strip()
         self.metric = metric
         self.condition = condition
@@ -76,12 +92,24 @@ class ResourceMonitor(BaseMonitor):
                     condition=self.condition,
                     threshold=self.threshold
                 )
+                default_tag = "chart_with_upwards_trend" if self.condition == "above" else "chart_with_downwards_trend"
+                tags = self.tags or default_tag
+                title = self.format_title(
+                    f"{self.name}: Resource Alert",
+                    target=self.target,
+                    metric=self.metric,
+                    val=val,
+                    condition=self.condition,
+                    threshold=self.threshold
+                )
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: Resource Alert",
-                    tags="chart_with_upwards_trend" if self.condition == "above" else "chart_with_downwards_trend",
-                    priority=4
+                    title=title,
+                    tags=tags,
+                    priority=self.priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted = True
             self.status_text = f"Triggered: {self.target} {self.metric}={val:.1f}{unit} ({self.condition} {self.threshold}{unit})"
@@ -119,5 +147,10 @@ class ResourceMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 60),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", ""),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )

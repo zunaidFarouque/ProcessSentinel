@@ -20,14 +20,30 @@ class StorageMultiTierMonitor(BaseMonitor):
         interval_seconds: int = 120,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "floppy_disk",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.drive = drive.strip()
         self.tiers = tiers or [
-            {"gb": 30.0, "message": "Storage Warning: Only {free_gb:.1f} GB remaining on {drive}", "tag": "warning", "level": "warning", "channel_id": None},
-            {"gb": 20.0, "message": "CRITICAL STORAGE: Only {free_gb:.1f} GB remaining on {drive}!", "tag": "rotating_light", "level": "critical", "channel_id": None},
-            {"gb": 10.0, "message": "FATAL STORAGE: Only {free_gb:.1f} GB remaining on {drive}! Imminent crash risk!", "tag": "skull,fire", "level": "critical", "channel_id": None}
+            {"gb": 30.0, "message": "Storage Warning: Only {free_gb:.1f} GB remaining on {drive}", "tag": "warning", "level": "warning", "priority": 3, "channel_id": None},
+            {"gb": 20.0, "message": "CRITICAL STORAGE: Only {free_gb:.1f} GB remaining on {drive}!", "tag": "rotating_light", "level": "critical", "priority": 4, "channel_id": None},
+            {"gb": 10.0, "message": "FATAL STORAGE: Only {free_gb:.1f} GB remaining on {drive}! Imminent crash risk!", "tag": "skull,fire", "level": "critical", "priority": 5, "channel_id": None}
         ]
         self.tiers.sort(key=lambda t: float(t.get("gb", 0)), reverse=True)
         self.triggered_tiers: Set[float] = set()
@@ -49,13 +65,22 @@ class StorageMultiTierMonitor(BaseMonitor):
                 if threshold_gb not in self.triggered_tiers:
                     msg = tier.get("message", "Low storage: {free_gb:.1f} GB left").format(free_gb=free_gb, drive=self.drive)
                     target_channel = tier.get("channel_id") or self.channel_id
-                    priority = 5 if tier.get("level") == "critical" else 4
+                    
+                    tier_prio = tier.get("priority")
+                    if tier_prio is not None:
+                        priority = int(tier_prio)
+                    else:
+                        priority = 5 if tier.get("level") == "critical" else self.priority
+
+                    title = self.format_title(f"{self.name}: Low Disk Space", drive=self.drive, free_gb=free_gb)
                     channel_registry.send_alert(
                         channel_id=target_channel,
                         message=msg,
-                        title=f"{self.name}: Low Disk Space",
-                        tags=tier.get("tag", "floppy_disk"),
-                        priority=priority
+                        title=title,
+                        tags=tier.get("tag", self.tags or "floppy_disk"),
+                        priority=priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
                     )
                     self.triggered_tiers.add(threshold_gb)
             else:
@@ -90,7 +115,12 @@ class StorageMultiTierMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 120),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", "floppy_disk"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )
 
 
@@ -108,9 +138,25 @@ class DirectorySizeMonitor(BaseMonitor):
         interval_seconds: int = 300,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "file_folder,warning",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.path = path.strip()
         self.max_size_gb = float(max_size_gb)
         self.message = message
@@ -140,12 +186,15 @@ class DirectorySizeMonitor(BaseMonitor):
         if current_gb > self.max_size_gb:
             if not self.alerted:
                 msg = self.message.format(path=self.path, max_size_gb=self.max_size_gb, current_gb=current_gb)
+                title = self.format_title(f"{self.name}: Folder Size Warning", path=self.path, max_size_gb=self.max_size_gb, current_gb=current_gb)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: Folder Size Warning",
-                    tags="file_folder,warning",
-                    priority=4
+                    title=title,
+                    tags=self.tags,
+                    priority=self.priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted = True
             self.status_text = f"Bloat: {current_gb:.2f} GB (> {self.max_size_gb:.1f} GB)"
@@ -179,5 +228,10 @@ class DirectorySizeMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 300),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", "file_folder,warning"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )

@@ -44,3 +44,35 @@ def test_storage_cascading_tiers(mock_registry):
         mon.check(None, mock_registry)
         assert mon.status_level == "ok"
         assert len(mon.triggered_tiers) == 0 # Cleared!
+
+
+def test_storage_custom_tier_priorities(mock_registry):
+    """Verifies that each tier can have an independently customized priority level."""
+    mon = StorageMultiTierMonitor(
+        name="Drive Guard",
+        drive="D:\\",
+        tiers=[
+            {"gb": 30.0, "message": "Low 30GB", "priority": 2, "level": "warning"},
+            {"gb": 20.0, "message": "Tight 20GB", "priority": 4, "level": "warning"},
+            {"gb": 10.0, "message": "Emergency 10GB", "priority": 5, "level": "critical"}
+        ]
+    )
+
+    # 1. Drops to 25GB -> Trigger 30GB tier (configured with priority 2)
+    with patch("shutil.disk_usage", return_value=(0, 0, 25 * (1024**3))):
+        mon.check(None, mock_registry)
+        assert len(mock_registry.sent_alerts) == 1
+        assert mock_registry.sent_alerts[-1]["priority"] == 2
+
+    # 2. Drops to 18GB -> Trigger 20GB tier (configured with priority 4)
+    with patch("shutil.disk_usage", return_value=(0, 0, 18 * (1024**3))):
+        mon.check(None, mock_registry)
+        assert len(mock_registry.sent_alerts) == 2
+        assert mock_registry.sent_alerts[-1]["priority"] == 4
+
+    # 3. Drops to 5GB -> Trigger 10GB tier (configured with priority 5)
+    with patch("shutil.disk_usage", return_value=(0, 0, 5 * (1024**3))):
+        mon.check(None, mock_registry)
+        assert len(mock_registry.sent_alerts) == 3
+        assert mock_registry.sent_alerts[-1]["priority"] == 5
+

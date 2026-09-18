@@ -18,9 +18,25 @@ class HTTPEndpointMonitor(BaseMonitor):
         interval_seconds: int = 60,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "globe_with_meridians,warning",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.url = url.strip()
         self.expected_status = int(expected_status)
         self.timeout_seconds = float(timeout_seconds)
@@ -40,12 +56,16 @@ class HTTPEndpointMonitor(BaseMonitor):
         if failed:
             if not self.alerted:
                 msg = self.message.format(url=self.url, status=status_code or "Down", error=err or "Unexpected status")
+                title = self.format_title(f"{self.name}: HTTP Offline", url=self.url, status=status_code or "Down", error=err or "Unexpected status")
+                click = self.click_url or (self.url if self.url.startswith("http") else None)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: HTTP Offline",
-                    tags="globe_with_meridians,warning",
-                    priority=4
+                    title=title,
+                    tags=self.tags,
+                    priority=self.priority,
+                    click_url=click,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted = True
             self.status_text = f"Offline: {status_code or 'Failed'} ({err[:25]})"
@@ -81,7 +101,12 @@ class HTTPEndpointMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 60),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", "globe_with_meridians,warning"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )
 
 
@@ -99,9 +124,25 @@ class LocalPortMonitor(BaseMonitor):
         interval_seconds: int = 60,
         channel_id: Optional[str] = None,
         enabled: bool = True,
-        monitor_id: Optional[str] = None
+        monitor_id: Optional[str] = None,
+        priority: int = 4,
+        tags: str = "electric_plug,warning",
+        title_template: Optional[str] = None,
+        click_url: Optional[str] = None,
+        markdown_enabled: bool = True
     ):
-        super().__init__(name, interval_seconds, channel_id, enabled, monitor_id)
+        super().__init__(
+            name=name,
+            interval_seconds=interval_seconds,
+            channel_id=channel_id,
+            enabled=enabled,
+            monitor_id=monitor_id,
+            priority=priority,
+            tags=tags,
+            title_template=title_template,
+            click_url=click_url,
+            markdown_enabled=markdown_enabled
+        )
         self.port = int(port)
         self.host = host.strip() or "127.0.0.1"
         self.message = message
@@ -122,12 +163,15 @@ class LocalPortMonitor(BaseMonitor):
         if not is_open:
             if not self.alerted:
                 msg = self.message.format(port=self.port, host=self.host)
+                title = self.format_title(f"{self.name}: Port Down", port=self.port, host=self.host)
                 channel_registry.send_alert(
                     channel_id=self.channel_id,
                     message=msg,
-                    title=f"{self.name}: Port Down",
-                    tags="electric_plug,warning",
-                    priority=4
+                    title=title,
+                    tags=self.tags,
+                    priority=self.priority,
+                    click_url=self.click_url,
+                    markdown=self.markdown_enabled
                 )
                 self.alerted = True
             self.status_text = f"Down: Port {self.port} closed"
@@ -161,5 +205,10 @@ class LocalPortMonitor(BaseMonitor):
             interval_seconds=data.get("interval_seconds", 60),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
-            monitor_id=data.get("id")
+            monitor_id=data.get("id"),
+            priority=data.get("priority", 4),
+            tags=data.get("tags", "electric_plug,warning"),
+            title_template=data.get("title_template"),
+            click_url=data.get("click_url"),
+            markdown_enabled=data.get("markdown_enabled", True)
         )
