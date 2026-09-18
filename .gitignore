@@ -1,11 +1,33 @@
-# Python artifacts
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
+*$py.class
 
-# Environments
+# Environments & Virtual Envs
 .env
 .venv/
 env/
+venv/
+ENV/
 
-# Local configuration (Do not upload local paths)
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Local configuration & logs (Do not upload machine-specific paths)
 config.json
+*.log
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
+
+# Operating System files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
