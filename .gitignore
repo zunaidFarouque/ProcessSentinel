@@ -24,6 +24,7 @@ config.json
 build/
 dist/
 *.spec
+*.zip
 
 # Operating System files
 Thumbs.db
