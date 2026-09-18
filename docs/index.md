@@ -22,6 +22,8 @@ Explore the documentation guides below:
    Practical setup recipes for 3D render batches, machine learning training runs, GIS/CAD data pipelines, and database servers.
 6. **[Configuration & Backup Guide](configuration.md)**  
    How `config.json` is persisted, the automatic self-healing backup system, and exporting/importing configurations across workstations.
+7. **[Release Engineering & Maintainer Guide](release-guide.md)**  
+   Automated packaging, release scripts (`release.ps1` / `release.bat`), and Scoop bucket synchronization.
 
 ---
 

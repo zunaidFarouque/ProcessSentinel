@@ -17,6 +17,7 @@ Comprehensive documentation is available in the [`docs/`](docs/index.md) directo
 * 📡 **[Channels & Alert Routing](docs/channels-and-routing.md)** — Managing topic aliases, defaults, priority mappings, and overrides.
 * 💡 **[Real-World Use Cases & Cookbooks](docs/use-cases.md)** — Recipes for 3D renders, deep learning, GIS pipelines, and databases.
 * ⚙️ **[Configuration & Backup Guide](docs/configuration.md)** — JSON schema, automatic quarantine, and import/export.
+* 🚀 **[Release Engineering Guide](docs/release-guide.md)** — Automated packaging, `release.ps1` pipeline, and Scoop bucket sync.
 
 ---
 
