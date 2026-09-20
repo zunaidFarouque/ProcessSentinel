@@ -1,24 +1,26 @@
-import psutil
+import subprocess
 from typing import Optional, Dict, Any
 from monitors.base import BaseMonitor
 
-class ResourceMonitor(BaseMonitor):
+class GPUMonitor(BaseMonitor):
     """
-    Monitors CPU % or RAM consumption of a process:
-      - CPU floor check (e.g. CPU < 5% = silent hang / zombie state)
-      - RAM ceiling check (e.g. RAM > 16000 MB = memory leak)
+    Monitors NVIDIA GPU health, VRAM, and temperatures via nvidia-smi:
+      - Temperature ceiling (e.g. Temp > 85°C = throttling or fan failure)
+      - VRAM leak ceiling (e.g. VRAM Used > 14000 MB)
+      - VRAM minimum floor (e.g. VRAM Free < 1000 MB = Out-of-Memory imminent)
+      - GPU compute load / utilization percentage
     """
-    monitor_type = "ResourceMonitor"
-    display_name = "Process Resource Usage (CPU % / RAM MB)"
+    monitor_type = "GPUMonitor"
+    display_name = "GPU VRAM & Temperature"
 
     def __init__(
         self,
         name: str,
-        target: str,
-        metric: str = "cpu_percent",
-        condition: str = "below",
-        threshold: float = 5.0,
-        message: str = "Process '{target}' {metric} is {val:.1f} ({condition} {threshold}).",
+        gpu_index: int = 0,
+        metric: str = "temperature",
+        condition: str = "above",
+        threshold: float = 85.0,
+        message: str = "GPU {gpu_index} {metric} is {val:.1f}{unit} ({condition} {threshold:.1f}{unit}).",
         interval_seconds: int = 60,
         channel_id: Optional[str] = None,
         enabled: bool = True,
@@ -49,64 +51,101 @@ class ResourceMonitor(BaseMonitor):
             action_command=action_command,
             action_timeout=action_timeout
         )
-        self.target = target.strip()
+        self.gpu_index = int(gpu_index)
         self.metric = metric
         self.condition = condition
         self.threshold = float(threshold)
         self.message = message
         self.alerted: bool = False
 
-    def check(self, engine, channel_registry) -> None:
-        target_lower = self.target.lower()
-        matched_procs = []
-        for proc in psutil.process_iter(["name", "cpu_percent", "memory_info"]):
-            try:
-                pname = (proc.info.get("name") or "").lower()
-                if target_lower in pname:
-                    matched_procs.append(proc)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+    def _get_unit(self) -> str:
+        unit_map = {
+            "temperature": "°C",
+            "vram_used_mb": "MB",
+            "vram_free_mb": "MB",
+            "gpu_util_percent": "%"
+        }
+        return unit_map.get(self.metric, "")
 
-        if not matched_procs:
-            self.status_text = f"Idle: '{self.target}' not running"
-            self.status_level = "idle"
+    def check(self, engine, channel_registry) -> None:
+        cmd = [
+            "nvidia-smi",
+            "--query-gpu=index,utilization.gpu,utilization.memory,memory.total,memory.used,memory.free,temperature.gpu",
+            "--format=csv,noheader,nounits"
+        ]
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                errors="replace"
+            )
+            if proc.returncode != 0:
+                self.status_text = "Error: nvidia-smi unavailable"
+                self.status_level = "warning"
+                return
+            output = proc.stdout
+        except (FileNotFoundError, subprocess.SubprocessError, Exception):
+            self.status_text = "Error: nvidia-smi unavailable"
+            self.status_level = "warning"
             return
 
-        total_cpu = 0.0
-        total_ram_mb = 0.0
-        for p in matched_procs:
-            try:
-                total_cpu += p.cpu_percent(interval=0.1)
-                mem = p.memory_info()
-                total_ram_mb += mem.rss / (1024 * 1024)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
+        gpu_data = {}
+        for line in output.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 7:
+                try:
+                    idx = int(parts[0])
+                    gpu_data[idx] = {
+                        "gpu_util_percent": float(parts[1]),
+                        "vram_util_percent": float(parts[2]),
+                        "vram_total_mb": float(parts[3]),
+                        "vram_used_mb": float(parts[4]),
+                        "vram_free_mb": float(parts[5]),
+                        "temperature": float(parts[6]),
+                    }
+                except ValueError:
+                    continue
 
-        val = total_cpu if self.metric == "cpu_percent" else total_ram_mb
-        unit = "%" if self.metric == "cpu_percent" else "MB"
+        if self.gpu_index not in gpu_data:
+            self.status_text = f"Error: GPU {self.gpu_index} not found"
+            self.status_level = "warning"
+            return
+
+        metrics = gpu_data[self.gpu_index]
+        val = metrics.get(self.metric, 0.0)
+        unit = self._get_unit()
 
         triggered = False
-        if self.condition == "below" and val < self.threshold:
+        if self.condition == "above" and val > self.threshold:
             triggered = True
-        elif self.condition == "above" and val > self.threshold:
+        elif self.condition == "below" and val < self.threshold:
             triggered = True
 
         if triggered:
             if not self.alerted:
                 msg = self.message.format(
-                    target=self.target,
+                    name=self.name,
+                    gpu_index=self.gpu_index,
                     metric=self.metric,
                     val=val,
+                    unit=unit,
                     condition=self.condition,
                     threshold=self.threshold
                 )
-                default_tag = "chart_with_upwards_trend" if self.condition == "above" else "chart_with_downwards_trend"
+                default_tag = "fire,warning" if self.metric == "temperature" else "warning,bar_chart"
                 tags = self.tags or default_tag
                 title = self.format_title(
-                    f"{self.name}: Resource Alert",
-                    target=self.target,
+                    f"{self.name}: GPU {self.gpu_index} Alert",
+                    gpu_index=self.gpu_index,
                     metric=self.metric,
                     val=val,
+                    unit=unit,
                     condition=self.condition,
                     threshold=self.threshold
                 )
@@ -122,22 +161,21 @@ class ResourceMonitor(BaseMonitor):
                     )
                 self.execute_trigger_action(engine)
                 self.alerted = True
-            self.status_text = f"Triggered: {self.target} {self.metric}={val:.1f}{unit} ({self.condition} {self.threshold}{unit})"
+            self.status_text = f"Triggered: GPU {self.gpu_index} {self.metric}={val:.1f}{unit} ({self.condition} {self.threshold:.1f}{unit})"
             self.status_level = "warning"
         else:
             if self.alerted and self.recovery_notification:
-                rec_msg = self.recovery_message or f"Process '{self.target}' {self.metric} returned to normal ({val:.1f}{unit})."
+                rec_msg = self.recovery_message or f"GPU {self.gpu_index} {self.metric} returned to normal ({val:.1f}{unit})."
                 rec_title = self.format_title(
                     f"{self.name}: Recovered",
-                    target=self.target,
+                    gpu_index=self.gpu_index,
                     metric=self.metric,
                     val=val,
-                    condition=self.condition,
-                    threshold=self.threshold
+                    unit=unit
                 )
                 self.send_recovery_alert(channel_registry, message=rec_msg, title=rec_title, tags="white_check_mark,recycle")
             self.alerted = False
-            self.status_text = f"OK: {self.target} {self.metric}={val:.1f}{unit}"
+            self.status_text = f"OK: GPU {self.gpu_index} {self.metric}={val:.1f}{unit}"
             self.status_level = "ok"
 
     def reset_state(self) -> None:
@@ -148,7 +186,7 @@ class ResourceMonitor(BaseMonitor):
     def to_dict(self) -> Dict[str, Any]:
         data = super().to_dict()
         data.update({
-            "target": self.target,
+            "gpu_index": self.gpu_index,
             "metric": self.metric,
             "condition": self.condition,
             "threshold": self.threshold,
@@ -157,14 +195,14 @@ class ResourceMonitor(BaseMonitor):
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ResourceMonitor":
+    def from_dict(cls, data: Dict[str, Any]) -> "GPUMonitor":
         return cls(
-            name=data.get("name", "Resource Monitor"),
-            target=data.get("target", ""),
-            metric=data.get("metric", "cpu_percent"),
-            condition=data.get("condition", "below"),
-            threshold=data.get("threshold", 5.0),
-            message=data.get("message", "Process '{target}' {metric} is {val:.1f} ({condition} {threshold})."),
+            name=data.get("name", "GPU Monitor"),
+            gpu_index=data.get("gpu_index", 0),
+            metric=data.get("metric", "temperature"),
+            condition=data.get("condition", "above"),
+            threshold=data.get("threshold", 85.0),
+            message=data.get("message", "GPU {gpu_index} {metric} is {val:.1f}{unit} ({condition} {threshold:.1f}{unit})."),
             interval_seconds=data.get("interval_seconds", 60),
             channel_id=data.get("channel_id"),
             enabled=data.get("enabled", True),
@@ -179,4 +217,3 @@ class ResourceMonitor(BaseMonitor):
             action_command=data.get("action_command"),
             action_timeout=data.get("action_timeout", 30)
         )
-

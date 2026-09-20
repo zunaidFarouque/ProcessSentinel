@@ -42,7 +42,9 @@ class ProcessStepDownMonitor(BaseMonitor):
         step_down_priority: int = 4,
         step_down_tags: str = "warning,arrow_down",
         recovery_notification: bool = False,
-        recovery_message: Optional[str] = None
+        recovery_message: Optional[str] = None,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -56,7 +58,9 @@ class ProcessStepDownMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.target = target.strip()
         self.initial_count = max(1, int(initial_count))
@@ -103,15 +107,17 @@ class ProcessStepDownMonitor(BaseMonitor):
             if 0 not in self.alerted_counts:
                 msg = self.critical_message.format(target=self.target, count=0)
                 title = self.format_title(f"{self.name}: All Closed", target=self.target, count=0)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.tags,
-                    priority=self.priority,
-                    click_url=self.click_url,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.tags,
+                        priority=self.priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.alerted_counts.add(0)
             self.status_text = f"CRITICAL: 0 instances active (All closed!)"
             self.status_level = "critical"
@@ -119,15 +125,17 @@ class ProcessStepDownMonitor(BaseMonitor):
             if current_count not in self.alerted_counts:
                 msg = self.step_down_message.format(target=self.target, count=current_count)
                 title = self.format_title(f"{self.name}: Step-Down Alert", target=self.target, count=current_count)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.step_down_tags,
-                    priority=self.step_down_priority,
-                    click_url=self.click_url,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.step_down_tags,
+                        priority=self.step_down_priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.alerted_counts.add(current_count)
             self.status_text = f"Warning: {current_count}/{self.initial_count} instances active"
             self.status_level = "warning"
@@ -173,8 +181,11 @@ class ProcessStepDownMonitor(BaseMonitor):
             step_down_priority=data.get("step_down_priority", 4),
             step_down_tags=data.get("step_down_tags", "warning,arrow_down"),
             recovery_notification=data.get("recovery_notification", False),
-            recovery_message=data.get("recovery_message")
+            recovery_message=data.get("recovery_message"),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
+
 
 
 class ProcessInstanceMonitor(BaseMonitor):
@@ -200,7 +211,9 @@ class ProcessInstanceMonitor(BaseMonitor):
         click_url: Optional[str] = None,
         markdown_enabled: bool = True,
         recovery_notification: bool = False,
-        recovery_message: Optional[str] = None
+        recovery_message: Optional[str] = None,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -214,7 +227,9 @@ class ProcessInstanceMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.target = target.strip()
         self.condition = condition
@@ -259,15 +274,17 @@ class ProcessInstanceMonitor(BaseMonitor):
             if not self.alerted:
                 msg = self.message.format(target=self.target, count=count, threshold=self.threshold)
                 title = self.format_title(f"{self.name}: Instance Alert", target=self.target, count=count, threshold=self.threshold)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.tags,
-                    priority=self.priority,
-                    click_url=self.click_url,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.tags,
+                        priority=self.priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.alerted = True
             self.status_text = f"Triggered: {count} instances ({self.condition} {self.threshold})"
             self.status_level = "warning"
@@ -315,5 +332,8 @@ class ProcessInstanceMonitor(BaseMonitor):
             click_url=data.get("click_url"),
             markdown_enabled=data.get("markdown_enabled", True),
             recovery_notification=data.get("recovery_notification", False),
-            recovery_message=data.get("recovery_message")
+            recovery_message=data.get("recovery_message"),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
+

@@ -6,6 +6,9 @@ from monitors.storage import StorageMultiTierMonitor, DirectorySizeMonitor
 from monitors.io_heartbeat import IOMonitor
 from monitors.resource import ResourceMonitor
 from monitors.network import HTTPEndpointMonitor, LocalPortMonitor
+from monitors.gpu import GPUMonitor
+from monitors.log_scanner import LogScannerMonitor
+from monitors.power import PowerMonitor
 
 MONITOR_CLASSES = {
     ProcessStepDownMonitor.monitor_type: ProcessStepDownMonitor,
@@ -16,6 +19,9 @@ MONITOR_CLASSES = {
     DirectorySizeMonitor.monitor_type: DirectorySizeMonitor,
     HTTPEndpointMonitor.monitor_type: HTTPEndpointMonitor,
     LocalPortMonitor.monitor_type: LocalPortMonitor,
+    GPUMonitor.monitor_type: GPUMonitor,
+    LogScannerMonitor.monitor_type: LogScannerMonitor,
+    PowerMonitor.monitor_type: PowerMonitor,
 }
 
 def create_monitor_from_dict(data: Dict[str, Any]) -> Optional[BaseMonitor]:
@@ -36,6 +42,10 @@ __all__ = [
     "DirectorySizeMonitor",
     "HTTPEndpointMonitor",
     "LocalPortMonitor",
+    "GPUMonitor",
+    "LogScannerMonitor",
+    "PowerMonitor",
     "MONITOR_CLASSES",
     "create_monitor_from_dict"
 ]
+

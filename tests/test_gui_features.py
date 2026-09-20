@@ -78,6 +78,23 @@ def test_gui_clone_monitor_logic(gui_env):
         assert cloned.name == f"{orig_mon.name} (Copy)"
         assert cloned.id != orig_mon.id
 
+def test_gui_clone_gpu_monitor_with_action(gui_env):
+    from monitors.gpu import GPUMonitor
+    app, root, engine, registry = gui_env
+    gpu_mon = GPUMonitor(name="VRAM Sentinel", gpu_index=0, metric="vram_free_mb", threshold=1024.0, action_command="clean.bat", action_timeout=20)
+    engine.add_monitor(gpu_mon)
+
+    with patch("gui.app.MonitorDialog") as mock_dialog:
+        app._open_clone_monitor_dialog(gpu_mon)
+        assert mock_dialog.called
+        _, kwargs = mock_dialog.call_args
+        cloned = kwargs["monitor"]
+        assert cloned.name == "VRAM Sentinel (Copy)"
+        assert cloned.id != gpu_mon.id
+        assert cloned.action_command == "clean.bat"
+        assert cloned.action_timeout == 20
+
+
 def test_tray_graceful_handling():
     tray = Win32SystemTray(tooltip="Test Tray")
     tray.start()

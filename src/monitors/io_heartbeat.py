@@ -30,7 +30,9 @@ class IOMonitor(BaseMonitor):
         click_url: Optional[str] = None,
         markdown_enabled: bool = True,
         recovery_notification: bool = False,
-        recovery_message: Optional[str] = None
+        recovery_message: Optional[str] = None,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -44,7 +46,9 @@ class IOMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.paths = [p.strip() for p in paths if p.strip()]
         self.filters = [f.strip().lower() for f in (filters or ["*.*"]) if f.strip()]
@@ -96,15 +100,17 @@ class IOMonitor(BaseMonitor):
             if not self.stalled_warned:
                 msg = self.message.format(stall_mins=mins_idle)
                 title = self.format_title(f"{self.name}: I/O Stalled", stall_mins=mins_idle)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.tags,
-                    priority=self.priority,
-                    click_url=self.click_url,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.tags,
+                        priority=self.priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.stalled_warned = True
             self.status_text = f"STALLED: Inactive for {mins_idle:.1f} mins (> {self.stall_minutes:.0f}m)"
             self.status_level = "warning"
@@ -146,5 +152,8 @@ class IOMonitor(BaseMonitor):
             click_url=data.get("click_url"),
             markdown_enabled=data.get("markdown_enabled", True),
             recovery_notification=data.get("recovery_notification", False),
-            recovery_message=data.get("recovery_message")
+            recovery_message=data.get("recovery_message"),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
+

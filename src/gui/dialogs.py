@@ -11,7 +11,11 @@ from monitors.storage import StorageMultiTierMonitor, DirectorySizeMonitor
 from monitors.io_heartbeat import IOMonitor
 from monitors.resource import ResourceMonitor
 from monitors.network import HTTPEndpointMonitor, LocalPortMonitor
+from monitors.gpu import GPUMonitor
+from monitors.log_scanner import LogScannerMonitor
+from monitors.power import PowerMonitor
 from gui.collapsible_frame import CTkCollapsibleFrame
+
 
 class ChannelDialog(ctk.CTkToplevel):
     def __init__(self, parent, channel: Optional[NotificationChannel] = None, on_save=None):
@@ -112,8 +116,12 @@ class MonitorDialog(ctk.CTkToplevel):
             "Process Resource Usage (CPU % / RAM MB)": "ResourceMonitor",
             "Directory Size Watcher": "DirectorySize",
             "HTTP / Web Endpoint Check": "HTTPEndpoint",
-            "Local Network Port Check": "LocalPort"
+            "Local Network Port Check": "LocalPort",
+            "GPU VRAM & Temperature": "GPUMonitor",
+            "Active Log File Scanner": "LogScanner",
+            "Power & Battery Status": "PowerMonitor"
         }
+
         self.reverse_type_options = {v: k for k, v in self.type_options.items()}
 
         current_display_type = self.reverse_type_options.get(self.monitor.monitor_type if self.monitor else "ProcessStepDown")
@@ -299,7 +307,22 @@ class MonitorDialog(ctk.CTkToplevel):
         self.recovery_var = ctk.BooleanVar(value=getattr(self.monitor, "recovery_notification", False) if self.monitor else False)
         ctk.CTkSwitch(container, text="Send Recovery Notification when condition resolves / returns to normal", variable=self.recovery_var, font=("Segoe UI", 11)).pack(anchor="w", padx=10, pady=(4, 6))
 
+        # Local Script / Command Trigger Action
+        ctk.CTkLabel(container, text="Self-Healing Action Command (Runs locally on trigger):", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=10, pady=(8, 2))
+        self.action_cmd_entry = ctk.CTkEntry(container, width=530, placeholder_text="e.g. powershell.exe -File C:\\heal.ps1 or net stop Spooler")
+        self.action_cmd_entry.pack(anchor="w", padx=10)
+        if self.monitor and getattr(self.monitor, "action_command", None):
+            self.action_cmd_entry.insert(0, self.monitor.action_command)
+
+        timeout_frame = ctk.CTkFrame(container, fg_color="transparent")
+        timeout_frame.pack(anchor="w", padx=10, pady=(4, 6))
+        ctk.CTkLabel(timeout_frame, text="Action Timeout (seconds):", font=("Segoe UI", 10)).pack(side="left")
+        self.action_timeout_entry = ctk.CTkEntry(timeout_frame, width=60)
+        self.action_timeout_entry.pack(side="left", padx=8)
+        self.action_timeout_entry.insert(0, str(getattr(self.monitor, "action_timeout", 30) if self.monitor else 30))
+
         # Phone Simulation Preview Card
+
         ctk.CTkLabel(container, text="📱 Notification Preview (Mobile Banner Simulation):", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 2))
         self.preview_card = ctk.CTkFrame(container, fg_color="#121212", corner_radius=8, border_width=1, border_color="#333333")
         self.preview_card.pack(fill="x", padx=10, pady=(2, 8))
@@ -690,6 +713,74 @@ class MonitorDialog(ctk.CTkToplevel):
             self.host_entry.pack(anchor="w")
             self.host_entry.insert(0, m.host if m else "127.0.0.1")
 
+        elif selected_code == "GPUMonitor":
+            ctk.CTkLabel(self.dynamic_frame, text="GPU Index:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(5, 2))
+            self.gpu_idx_entry = ctk.CTkEntry(self.dynamic_frame, width=100)
+            self.gpu_idx_entry.pack(anchor="w")
+            self.gpu_idx_entry.insert(0, str(m.gpu_index if m else 0))
+
+            ctk.CTkLabel(self.dynamic_frame, text="Target Metric:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
+            self.gpu_metric_var = ctk.StringVar(value=m.metric if m else "temperature")
+            ctk.CTkOptionMenu(
+                self.dynamic_frame,
+                values=["temperature", "vram_used_mb", "vram_free_mb", "gpu_util_percent"],
+                variable=self.gpu_metric_var
+            ).pack(anchor="w")
+
+            ctk.CTkLabel(self.dynamic_frame, text="Condition & Threshold:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
+            g_frame = ctk.CTkFrame(self.dynamic_frame, fg_color="transparent")
+            g_frame.pack(fill="x")
+            self.gpu_cond_var = ctk.StringVar(value=m.condition if m else "above")
+            ctk.CTkOptionMenu(g_frame, values=["above", "below"], variable=self.gpu_cond_var, width=100).pack(side="left")
+            self.gpu_thresh_entry = ctk.CTkEntry(g_frame, width=120)
+            self.gpu_thresh_entry.pack(side="left", padx=10)
+            self.gpu_thresh_entry.insert(0, str(m.threshold if m else 85.0))
+
+        elif selected_code == "LogScanner":
+            ctk.CTkLabel(self.dynamic_frame, text="Log File Path to Watch:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(5, 2))
+            log_frame = ctk.CTkFrame(self.dynamic_frame, fg_color="transparent")
+            log_frame.pack(fill="x")
+            self.log_path_entry = ctk.CTkEntry(log_frame, width=440)
+            self.log_path_entry.pack(side="left", fill="x", expand=True)
+            if m: self.log_path_entry.insert(0, m.file_path)
+            ctk.CTkButton(log_frame, text="Browse", width=90, command=self._browse_log_file).pack(side="left", padx=(5, 0))
+
+            ctk.CTkLabel(self.dynamic_frame, text="Search Patterns (Comma Separated):", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
+            self.log_patterns_entry = ctk.CTkEntry(self.dynamic_frame, width=540, placeholder_text="e.g. ERROR, FATAL, Exception")
+            self.log_patterns_entry.pack(anchor="w")
+            if m and m.patterns:
+                self.log_patterns_entry.insert(0, ", ".join(m.patterns))
+            else:
+                self.log_patterns_entry.insert(0, "ERROR, FATAL, Exception")
+
+            opt_frame = ctk.CTkFrame(self.dynamic_frame, fg_color="transparent")
+            opt_frame.pack(fill="x", pady=(10, 4))
+            self.log_regex_var = ctk.BooleanVar(value=m.is_regex if m else False)
+            ctk.CTkCheckBox(opt_frame, text="Use Regular Expression (Regex)", variable=self.log_regex_var, font=("Segoe UI", 11)).pack(side="left", padx=(0, 20))
+            self.log_case_var = ctk.BooleanVar(value=m.case_sensitive if m else False)
+            ctk.CTkCheckBox(opt_frame, text="Case Sensitive", variable=self.log_case_var, font=("Segoe UI", 11)).pack(side="left")
+
+        elif selected_code == "PowerMonitor":
+            self.alert_battery_var = ctk.BooleanVar(value=m.alert_on_battery if m else True)
+            ctk.CTkCheckBox(
+                self.dynamic_frame,
+                text="Alert immediately when AC power is disconnected (running on battery)",
+                variable=self.alert_battery_var,
+                font=("Segoe UI", 11, "bold")
+            ).pack(anchor="w", pady=(8, 10))
+
+            ctk.CTkLabel(self.dynamic_frame, text="Low Battery Warning Threshold (%):", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(5, 2))
+            self.battery_thresh_entry = ctk.CTkEntry(self.dynamic_frame, width=120)
+            self.battery_thresh_entry.pack(anchor="w")
+            self.battery_thresh_entry.insert(0, str(m.battery_threshold if m and m.battery_threshold is not None else 20.0))
+
+    def _browse_log_file(self):
+        f = filedialog.askopenfilename(title="Select Log File to Scan", filetypes=[("Log Files", "*.log;*.txt"), ("All Files", "*.*")])
+        if f:
+            self.log_path_entry.delete(0, tk.END)
+            self.log_path_entry.insert(0, f)
+
+
     def _browse_folder(self):
         f = filedialog.askdirectory(title="Select Output/Scratch Folder to Watch")
         if f:
@@ -728,6 +819,12 @@ class MonitorDialog(ctk.CTkToplevel):
         recovery_notif = self.recovery_var.get()
         custom_msg = self.notif_msg_entry.get().strip()
 
+        action_cmd = self.action_cmd_entry.get().strip() or None
+        try:
+            action_timeout = int(self.action_timeout_entry.get().strip() or 30)
+        except ValueError:
+            action_timeout = 30
+
         try:
             if selected_code == "ProcessStepDown":
                 target = self.target_entry.get().strip()
@@ -748,7 +845,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "ProcessInstance":
@@ -771,7 +870,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "IOMonitor":
@@ -794,7 +895,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "StorageMultiTier":
@@ -823,7 +926,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
                     step_down_mode=self.step_down_var.get(),
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "ResourceMonitor":
@@ -846,7 +951,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "DirectorySize":
@@ -867,7 +974,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "HTTPEndpoint":
@@ -888,7 +997,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
 
             elif selected_code == "LocalPort":
@@ -908,8 +1019,83 @@ class MonitorDialog(ctk.CTkToplevel):
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
-                    recovery_notification=recovery_notif
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
                 )
+
+            elif selected_code == "GPUMonitor":
+                gpu_idx = int(self.gpu_idx_entry.get().strip())
+                thresh = float(self.gpu_thresh_entry.get().strip())
+                msg = custom_msg or "GPU {gpu_index} {metric} is {val:.1f}{unit} ({condition} {threshold:.1f}{unit})."
+                new_mon = GPUMonitor(
+                    name=name,
+                    gpu_index=gpu_idx,
+                    metric=self.gpu_metric_var.get(),
+                    condition=self.gpu_cond_var.get(),
+                    threshold=thresh,
+                    message=msg,
+                    interval_seconds=interval,
+                    channel_id=channel_id,
+                    monitor_id=mon_id,
+                    priority=prio,
+                    tags=custom_tags or ("fire,warning" if self.gpu_metric_var.get() == "temperature" else "warning,bar_chart"),
+                    title_template=custom_title,
+                    click_url=custom_click,
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
+                )
+
+            elif selected_code == "LogScanner":
+                fpath = self.log_path_entry.get().strip()
+                if not fpath: raise ValueError("Log file path is required.")
+                pats = [p.strip() for p in self.log_patterns_entry.get().split(",") if p.strip()]
+                if not pats: raise ValueError("At least one pattern is required.")
+                msg = custom_msg or "Log pattern matched in '{file_path}': {line}"
+                new_mon = LogScannerMonitor(
+                    name=name,
+                    file_path=fpath,
+                    patterns=pats,
+                    is_regex=self.log_regex_var.get(),
+                    case_sensitive=self.log_case_var.get(),
+                    message=msg,
+                    interval_seconds=interval,
+                    channel_id=channel_id,
+                    monitor_id=mon_id,
+                    priority=prio,
+                    tags=custom_tags or "page_facing_up,warning",
+                    title_template=custom_title,
+                    click_url=custom_click,
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
+                )
+
+            elif selected_code == "PowerMonitor":
+                b_thresh_str = self.battery_thresh_entry.get().strip()
+                b_thresh = float(b_thresh_str) if b_thresh_str else None
+                msg = custom_msg or "Power Alert: {status_detail}"
+                new_mon = PowerMonitor(
+                    name=name,
+                    alert_on_battery=self.alert_battery_var.get(),
+                    battery_threshold=b_thresh,
+                    message=msg,
+                    interval_seconds=interval,
+                    channel_id=channel_id,
+                    monitor_id=mon_id,
+                    priority=prio,
+                    tags=custom_tags or "battery,warning",
+                    title_template=custom_title,
+                    click_url=custom_click,
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif,
+                    action_command=action_cmd,
+                    action_timeout=action_timeout
+                )
+
 
             if self.on_save:
                 self.on_save(new_mon)

@@ -28,6 +28,9 @@ Comprehensive documentation is available in the [`docs/`](docs/index.md) directo
 * **Rule-Level Routing**: Inherit a global default channel or route specific monitors (or alert tiers) to distinct channels.
 
 ### 2. Rich Monitor Types
+* **GPU VRAM & Temperature Watcher**: Hooks into `nvidia-smi` to monitor GPU utilization %, VRAM used/free (MB), and core temperature (°C) for AI/ML training runs and 3D rendering pipelines.
+* **Active Log File Scanner / Tailer**: Incrementally tails log files (`*.log`, `*.txt`) with regex or keyword matching (e.g. `CUDA out of memory`, `Traceback`, `FATAL`) and log rotation detection.
+* **System Power & Battery State Check**: Uses Windows power sensors to detect sudden AC mains disconnects (tripped circuit / running on UPS) and low battery conditions (< 20%).
 * **Process Step-Down (High-Watermark)**: Stateful instance and visible window tracking. Alerts once for each downward step (e.g. 3 -> 2 -> 1) without duplicate alert spam, plus critical alerts when all instances terminate.
 * **Storage Free Space (Multi-Tier & Step-Down Latching)**: Cascading storage warnings on any drive (e.g., 30 GB Warning, 20 GB Critical, 10 GB Fatal). Features optional **Step-Down Latching** to alert strictly once per threshold and debounce minor disk space fluctuations.
 * **Process Instance Count**: Monitored thresholds for headless daemons or workers (alerts when instances go below, above, or equal a target).
@@ -38,6 +41,7 @@ Comprehensive documentation is available in the [`docs/`](docs/index.md) directo
 * **Local Network Port Check**: Verifies that database or service ports (Postgres, Redis, custom sockets) remain open.
 
 ### 3. Interactive Management & State Control
+* **Self-Healing Trigger Actions**: Execute custom local commands or scripts (`.bat`, `.ps1`, `.py`, `.exe`) automatically whenever an alert triggers (e.g., restart crashed services, purge temp folders, or gracefully hibernate).
 * **Windows System Tray & Background Guard**: Minimizes seamlessly to the Windows Notification Area tray; keeps surveillance running 24/7 without accidental window closures.
 * **Auto-Start Engine on Boot/Launch**: Configurable setting to engage monitoring immediately upon app launch.
 * **Auto-Recovery ("Resolved") Notifications**: Optional recovery alerts when previously failing endpoints, ports, or processes return to normal healthy states.

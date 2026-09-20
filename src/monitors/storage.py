@@ -29,7 +29,9 @@ class StorageMultiTierMonitor(BaseMonitor):
         recovery_notification: bool = False,
         recovery_message: Optional[str] = None,
         step_down_mode: bool = True,
-        recovery_margin_gb: float = 5.0
+        recovery_margin_gb: float = 5.0,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -43,7 +45,9 @@ class StorageMultiTierMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.drive = drive.strip()
         self.tiers = tiers or [
@@ -69,27 +73,33 @@ class StorageMultiTierMonitor(BaseMonitor):
         for tier in self.tiers:
             threshold_gb = float(tier.get("gb", 0))
             if free_gb <= threshold_gb:
-                highest_triggered_level = tier.get("level", "warning")
+                tier_level = tier.get("level", "warning")
+                if tier_level == "critical":
+                    highest_triggered_level = "critical"
+                elif highest_triggered_level != "critical":
+                    highest_triggered_level = "warning"
+
                 if threshold_gb not in self.triggered_tiers:
-                    msg = tier.get("message", "Low storage: {free_gb:.1f} GB left").format(free_gb=free_gb, drive=self.drive)
+                    msg = tier.get("message", "Storage alert on {drive}").format(drive=self.drive, free_gb=free_gb)
                     target_channel = tier.get("channel_id") or self.channel_id
                     
-                    tier_prio = tier.get("priority")
-                    if tier_prio is not None:
-                        priority = int(tier_prio)
+                    if "priority" in tier:
+                        priority = int(tier["priority"])
                     else:
                         priority = 5 if tier.get("level") == "critical" else self.priority
 
                     title = self.format_title(f"{self.name}: Low Disk Space", drive=self.drive, free_gb=free_gb)
-                    channel_registry.send_alert(
-                        channel_id=target_channel,
-                        message=msg,
-                        title=title,
-                        tags=tier.get("tag", self.tags or "floppy_disk"),
-                        priority=priority,
-                        click_url=self.click_url,
-                        markdown=self.markdown_enabled
-                    )
+                    if channel_registry:
+                        channel_registry.send_alert(
+                            channel_id=target_channel,
+                            message=msg,
+                            title=title,
+                            tags=tier.get("tag", self.tags or "floppy_disk"),
+                            priority=priority,
+                            click_url=self.click_url,
+                            markdown=self.markdown_enabled
+                        )
+                    self.execute_trigger_action(engine)
                     self.triggered_tiers.add(threshold_gb)
             else:
                 if self.step_down_mode:
@@ -126,7 +136,7 @@ class StorageMultiTierMonitor(BaseMonitor):
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "StorageMultiTierMonitor":
         return cls(
-            name=data.get("name", "Storage Monitor"),
+            name=data.get("name", "Storage Space Multi-Tier"),
             drive=data.get("drive", "C:\\"),
             tiers=data.get("tiers", []),
             interval_seconds=data.get("interval_seconds", 120),
@@ -141,7 +151,9 @@ class StorageMultiTierMonitor(BaseMonitor):
             recovery_notification=data.get("recovery_notification", False),
             recovery_message=data.get("recovery_message"),
             step_down_mode=data.get("step_down_mode", True),
-            recovery_margin_gb=float(data.get("recovery_margin_gb", 5.0))
+            recovery_margin_gb=float(data.get("recovery_margin_gb", 5.0)),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
 
 
@@ -166,7 +178,9 @@ class DirectorySizeMonitor(BaseMonitor):
         click_url: Optional[str] = None,
         markdown_enabled: bool = True,
         recovery_notification: bool = False,
-        recovery_message: Optional[str] = None
+        recovery_message: Optional[str] = None,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -180,7 +194,9 @@ class DirectorySizeMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.path = path.strip()
         self.max_size_gb = float(max_size_gb)
@@ -212,15 +228,17 @@ class DirectorySizeMonitor(BaseMonitor):
             if not self.alerted:
                 msg = self.message.format(path=self.path, max_size_gb=self.max_size_gb, current_gb=current_gb)
                 title = self.format_title(f"{self.name}: Folder Size Warning", path=self.path, max_size_gb=self.max_size_gb, current_gb=current_gb)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.tags,
-                    priority=self.priority,
-                    click_url=self.click_url,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.tags,
+                        priority=self.priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.alerted = True
             self.status_text = f"Bloat: {current_gb:.2f} GB (> {self.max_size_gb:.1f} GB)"
             self.status_level = "warning"
@@ -260,5 +278,8 @@ class DirectorySizeMonitor(BaseMonitor):
             click_url=data.get("click_url"),
             markdown_enabled=data.get("markdown_enabled", True),
             recovery_notification=data.get("recovery_notification", False),
-            recovery_message=data.get("recovery_message")
+            recovery_message=data.get("recovery_message"),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
+

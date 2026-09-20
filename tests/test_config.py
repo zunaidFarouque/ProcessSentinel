@@ -29,6 +29,35 @@ def test_config_roundtrip(tmp_path):
     assert loaded_mons[0].initial_count == 4
     assert loaded_mons[1].filters == ["*.shp"]
 
+def test_config_phase2_monitors_roundtrip(tmp_path):
+    from monitors.gpu import GPUMonitor
+    from monitors.log_scanner import LogScannerMonitor
+    from monitors.power import PowerMonitor
+
+    config_file = str(tmp_path / "phase2_config.json")
+    reg = ChannelRegistry()
+
+    monitors = [
+        GPUMonitor(name="GPU Guard", gpu_index=0, metric="temperature", threshold=82.0, action_command="throttle.bat"),
+        LogScannerMonitor(name="Log Watcher", file_path="C:\\app.log", patterns=["ERROR"], is_regex=True),
+        PowerMonitor(name="Battery Watcher", alert_on_battery=True, battery_threshold=18.0)
+    ]
+
+    success = ConfigManager.save_config(reg, monitors, filepath=config_file)
+    assert success is True
+
+    loaded_reg, loaded_mons = ConfigManager.load_config(filepath=config_file)
+    assert len(loaded_mons) == 3
+    assert isinstance(loaded_mons[0], GPUMonitor)
+    assert loaded_mons[0].threshold == 82.0
+    assert loaded_mons[0].action_command == "throttle.bat"
+    assert isinstance(loaded_mons[1], LogScannerMonitor)
+    assert loaded_mons[1].patterns == ["ERROR"]
+    assert loaded_mons[1].is_regex is True
+    assert isinstance(loaded_mons[2], PowerMonitor)
+    assert loaded_mons[2].battery_threshold == 18.0
+
+
 def test_config_missing_file_defaults(tmp_path):
     missing_file = str(tmp_path / "non_existent.json")
     reg, mons = ConfigManager.load_config(filepath=missing_file)

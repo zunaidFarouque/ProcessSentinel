@@ -25,7 +25,9 @@ class HTTPEndpointMonitor(BaseMonitor):
         click_url: Optional[str] = None,
         markdown_enabled: bool = True,
         recovery_notification: bool = False,
-        recovery_message: Optional[str] = None
+        recovery_message: Optional[str] = None,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -39,7 +41,9 @@ class HTTPEndpointMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.url = url.strip()
         self.expected_status = int(expected_status)
@@ -62,15 +66,17 @@ class HTTPEndpointMonitor(BaseMonitor):
                 msg = self.message.format(url=self.url, status=status_code or "Down", error=err or "Unexpected status")
                 title = self.format_title(f"{self.name}: HTTP Offline", url=self.url, status=status_code or "Down", error=err or "Unexpected status")
                 click = self.click_url or (self.url if self.url.startswith("http") else None)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.tags,
-                    priority=self.priority,
-                    click_url=click,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.tags,
+                        priority=self.priority,
+                        click_url=click,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.alerted = True
             self.status_text = f"Offline: {status_code or 'Failed'} ({err[:25]})"
             self.status_level = "warning"
@@ -82,6 +88,7 @@ class HTTPEndpointMonitor(BaseMonitor):
             self.alerted = False
             self.status_text = f"OK: Status {status_code}"
             self.status_level = "ok"
+
 
     def reset_state(self) -> None:
         self.alerted = False
@@ -116,7 +123,9 @@ class HTTPEndpointMonitor(BaseMonitor):
             click_url=data.get("click_url"),
             markdown_enabled=data.get("markdown_enabled", True),
             recovery_notification=data.get("recovery_notification", False),
-            recovery_message=data.get("recovery_message")
+            recovery_message=data.get("recovery_message"),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
 
 
@@ -141,7 +150,9 @@ class LocalPortMonitor(BaseMonitor):
         click_url: Optional[str] = None,
         markdown_enabled: bool = True,
         recovery_notification: bool = False,
-        recovery_message: Optional[str] = None
+        recovery_message: Optional[str] = None,
+        action_command: Optional[str] = None,
+        action_timeout: int = 30
     ):
         super().__init__(
             name=name,
@@ -155,7 +166,9 @@ class LocalPortMonitor(BaseMonitor):
             click_url=click_url,
             markdown_enabled=markdown_enabled,
             recovery_notification=recovery_notification,
-            recovery_message=recovery_message
+            recovery_message=recovery_message,
+            action_command=action_command,
+            action_timeout=action_timeout
         )
         self.port = int(port)
         self.host = host.strip() or "127.0.0.1"
@@ -178,15 +191,17 @@ class LocalPortMonitor(BaseMonitor):
             if not self.alerted:
                 msg = self.message.format(port=self.port, host=self.host)
                 title = self.format_title(f"{self.name}: Port Down", port=self.port, host=self.host)
-                channel_registry.send_alert(
-                    channel_id=self.channel_id,
-                    message=msg,
-                    title=title,
-                    tags=self.tags,
-                    priority=self.priority,
-                    click_url=self.click_url,
-                    markdown=self.markdown_enabled
-                )
+                if channel_registry:
+                    channel_registry.send_alert(
+                        channel_id=self.channel_id,
+                        message=msg,
+                        title=title,
+                        tags=self.tags,
+                        priority=self.priority,
+                        click_url=self.click_url,
+                        markdown=self.markdown_enabled
+                    )
+                self.execute_trigger_action(engine)
                 self.alerted = True
             self.status_text = f"Down: Port {self.port} closed"
             self.status_level = "warning"
@@ -230,5 +245,8 @@ class LocalPortMonitor(BaseMonitor):
             click_url=data.get("click_url"),
             markdown_enabled=data.get("markdown_enabled", True),
             recovery_notification=data.get("recovery_notification", False),
-            recovery_message=data.get("recovery_message")
+            recovery_message=data.get("recovery_message"),
+            action_command=data.get("action_command"),
+            action_timeout=data.get("action_timeout", 30)
         )
+
