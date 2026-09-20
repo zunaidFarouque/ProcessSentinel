@@ -4,12 +4,22 @@ import requests
 from typing import Optional, List, Dict, Any
 
 class NotificationChannel:
-    """Represents a named notification endpoint (e.g. 'My Phone', 'Lab IT')."""
-    def __init__(self, name: str, url: str, channel_id: str = None, auth_token: Optional[str] = None):
+    """Represents a named notification endpoint (e.g. 'My Phone', 'Telegram Bot', 'Discord Webhook')."""
+    def __init__(
+        self,
+        name: str,
+        url: str = "",
+        channel_id: Optional[str] = None,
+        channel_type: str = "ntfy",
+        auth_token: Optional[str] = None,
+        chat_id: Optional[str] = None
+    ):
         self.id = channel_id or f"chan-{uuid.uuid4().hex[:8]}"
-        self.name = name.strip()
-        self.url = url.strip()
+        self.name = name.strip() if name else "Unnamed Channel"
+        self.url = url.strip() if url else ""
+        self.channel_type = (channel_type or "ntfy").strip().lower()
         self.auth_token = auth_token.strip() if auth_token else None
+        self.chat_id = str(chat_id).strip() if chat_id is not None and str(chat_id).strip() else None
 
     def send(
         self,
@@ -20,6 +30,26 @@ class NotificationChannel:
         click_url: Optional[str] = None,
         markdown: bool = True,
         actions: Optional[str] = None
+    ) -> bool:
+        """Dispatches notification according to channel_type."""
+        if self.channel_type == "telegram":
+            return self._send_telegram(message, title)
+        elif self.channel_type == "discord":
+            return self._send_discord(message, title)
+        elif self.channel_type == "slack":
+            return self._send_slack(message, title)
+        else:
+            return self._send_ntfy(message, title, tags, priority, click_url, markdown, actions)
+
+    def _send_ntfy(
+        self,
+        message: str,
+        title: str,
+        tags: str,
+        priority: int,
+        click_url: Optional[str],
+        markdown: bool,
+        actions: Optional[str]
     ) -> bool:
         """Sends an HTTP POST notification to ntfy.sh with timeout and safe exception handling."""
         if not self.url:
@@ -53,14 +83,92 @@ class NotificationChannel:
             print(f"[Channel '{self.name}'] Network error sending to {self.url}: {e}")
             return False
 
+    def _send_telegram(self, message: str, title: str) -> bool:
+        """Sends an HTTP POST notification via Telegram Bot API."""
+        if not self.chat_id:
+            print(f"[Channel '{self.name}'] Telegram error: missing chat_id")
+            return False
+
+        endpoint = self.url
+        if not endpoint or ("api.telegram.org" not in endpoint and not endpoint.startswith("http")):
+            if self.auth_token:
+                endpoint = f"https://api.telegram.org/bot{self.auth_token}/sendMessage"
+            else:
+                endpoint = self.url
+        if not endpoint:
+            print(f"[Channel '{self.name}'] Telegram error: missing bot token or API URL")
+            return False
+
+        text = f"*{title}*\n\n{message}" if title else message
+        payload = {
+            "chat_id": self.chat_id,
+            "text": text,
+            "parse_mode": "Markdown"
+        }
+
+        try:
+            response = requests.post(
+                endpoint,
+                json=payload,
+                timeout=5
+            )
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            print(f"[Channel '{self.name}'] Network error sending to Telegram ({endpoint}): {e}")
+            return False
+
+    def _send_discord(self, message: str, title: str) -> bool:
+        """Sends an HTTP POST notification to a Discord webhook."""
+        if not self.url:
+            return False
+
+        content = f"**{title}**\n{message}" if title else message
+        payload = {"content": content}
+
+        try:
+            response = requests.post(
+                self.url,
+                json=payload,
+                timeout=5
+            )
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            print(f"[Channel '{self.name}'] Network error sending to Discord ({self.url}): {e}")
+            return False
+
+    def _send_slack(self, message: str, title: str) -> bool:
+        """Sends an HTTP POST notification to a Slack webhook."""
+        if not self.url:
+            return False
+
+        text = f"*{title}*\n{message}" if title else message
+        payload = {"text": text}
+
+        try:
+            response = requests.post(
+                self.url,
+                json=payload,
+                timeout=5
+            )
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            print(f"[Channel '{self.name}'] Network error sending to Slack ({self.url}): {e}")
+            return False
+
     def to_dict(self) -> dict:
         data = {
             "id": self.id,
             "name": self.name,
-            "url": self.url
+            "url": self.url,
+            "channel_type": self.channel_type
         }
         if self.auth_token:
             data["auth_token"] = self.auth_token
+        if self.chat_id:
+            data["chat_id"] = self.chat_id
         return data
 
     @classmethod
@@ -69,7 +177,9 @@ class NotificationChannel:
             name=data.get("name", "Unnamed Channel"),
             url=data.get("url", ""),
             channel_id=data.get("id"),
-            auth_token=data.get("auth_token")
+            channel_type=data.get("channel_type", "ntfy"),
+            auth_token=data.get("auth_token"),
+            chat_id=data.get("chat_id")
         )
 
 
@@ -110,8 +220,21 @@ class ChannelRegistry:
         if any(c.id == channel_id for c in self.channels):
             self.default_channel_id = channel_id
 
-    def add_channel(self, name: str, url: str, auth_token: Optional[str] = None) -> NotificationChannel:
-        chan = NotificationChannel(name, url, auth_token=auth_token)
+    def add_channel(
+        self,
+        name: str,
+        url: str = "",
+        auth_token: Optional[str] = None,
+        channel_type: str = "ntfy",
+        chat_id: Optional[str] = None
+    ) -> NotificationChannel:
+        chan = NotificationChannel(
+            name=name,
+            url=url,
+            channel_type=channel_type,
+            auth_token=auth_token,
+            chat_id=chat_id
+        )
         self.channels.append(chan)
         if not self.default_channel_id:
             self.default_channel_id = chan.id

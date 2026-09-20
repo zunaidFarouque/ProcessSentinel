@@ -24,8 +24,10 @@ Comprehensive documentation is available in the [`docs/`](docs/index.md) directo
 ## Key Features
 
 ### 1. Flexible Multi-Channel Routing
-* **Topic Aliases**: Configure multiple named notification endpoints (e.g., *"My Phone"*, *"Lab IT Alerts"*).
+* **Multi-Provider Support**: Seamlessly route alerts across **ntfy.sh** (mobile push), **Telegram Bots**, **Discord Webhooks**, and **Slack Webhooks**.
+* **Topic Aliases**: Configure multiple named notification endpoints (e.g., *"My Phone"*, *"Lab Discord"*, *"IT Slack Alerts"*).
 * **Rule-Level Routing**: Inherit a global default channel or route specific monitors (or alert tiers) to distinct channels.
+* **Remote Action Listener**: Remotely trigger self-healing scripts or resets via authorized push commands.
 
 ### 2. Rich Monitor Types
 * **GPU VRAM & Temperature Watcher**: Hooks into `nvidia-smi` to monitor GPU utilization %, VRAM used/free (MB), and core temperature (°C) for AI/ML training runs and 3D rendering pipelines.

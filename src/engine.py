@@ -23,6 +23,7 @@ class MonitorEngine:
         self.running = False
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.RLock()
+        self.remote_listener: Optional[Any] = None
 
         # Callbacks for GUI synchronization
         self.on_monitor_updated: Optional[Callable[[BaseMonitor], None]] = None
@@ -101,7 +102,26 @@ class MonitorEngine:
     def stop(self):
         with self._lock:
             self.running = False
+        if self.remote_listener and getattr(self.remote_listener, "running", False):
+            self.remote_listener.stop()
         self.log("Monitoring Engine stopped.", level="info")
+
+    def enable_remote_listener(self, topic_url: str, auth_token: Optional[str] = None, poll_interval: float = 2.0):
+        from remote_actions import RemoteCommandListener
+        self.disable_remote_listener()
+        self.remote_listener = RemoteCommandListener(
+            engine=self,
+            topic_url=topic_url,
+            auth_token=auth_token,
+            poll_interval=poll_interval
+        )
+        self.remote_listener.start()
+        return self.remote_listener
+
+    def disable_remote_listener(self):
+        if self.remote_listener and getattr(self.remote_listener, "running", False):
+            self.remote_listener.stop()
+        self.remote_listener = None
 
     def is_running(self) -> bool:
         return self.running

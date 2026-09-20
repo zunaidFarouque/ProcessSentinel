@@ -260,12 +260,26 @@ class SentinelGUI:
             info_frame.pack(side="left", padx=15, pady=12, fill="x", expand=True)
 
             is_default = (ch.id == self.channel_registry.default_channel_id)
-            title_text = ch.name + ("  [PRIMARY DEFAULT]" if is_default else "")
-            if ch.auth_token:
+            type_labels = {
+                "ntfy": "ntfy.sh",
+                "telegram": "Telegram",
+                "discord": "Discord",
+                "slack": "Slack"
+            }
+            type_badge = f"[{type_labels.get(ch.channel_type, ch.channel_type.upper())}] "
+            title_text = type_badge + ch.name + ("  [PRIMARY DEFAULT]" if is_default else "")
+            if ch.auth_token and ch.channel_type == "ntfy":
                 title_text += "  [🔒 Token Protected]"
             title_color = "#38b000" if is_default else "white"
             ctk.CTkLabel(info_frame, text=title_text, font=("Segoe UI", 13, "bold"), text_color=title_color).pack(anchor="w")
-            ctk.CTkLabel(info_frame, text=ch.url, font=("Segoe UI", 11), text_color="gray60").pack(anchor="w")
+
+            if ch.channel_type == "telegram":
+                subtitle = f"Chat ID: {ch.chat_id or 'Not configured'}"
+                if ch.url and "api.telegram.org" not in ch.url:
+                    subtitle += f" ({ch.url})"
+            else:
+                subtitle = ch.url or "No URL configured"
+            ctk.CTkLabel(info_frame, text=subtitle, font=("Segoe UI", 11), text_color="gray60").pack(anchor="w")
 
             btn_frame = ctk.CTkFrame(card, fg_color="transparent")
             btn_frame.pack(side="right", padx=15, pady=12)
@@ -285,9 +299,9 @@ class SentinelGUI:
                     def on_finish():
                         button.configure(text="⚡ Test Alert", state="normal", fg_color="#1f6aa5")
                         if ok:
-                            messagebox.showinfo("Success", f"Test notification delivered to '{channel.name}'!")
+                            messagebox.showinfo("Success", f"Test notification delivered to '{channel.name}' ({channel.channel_type})!")
                         else:
-                            messagebox.showerror("Error", f"Failed sending to {channel.url}.\nCheck topic URL or network connection.")
+                            messagebox.showerror("Error", f"Failed sending to '{channel.name}'.\nCheck channel credentials or network connection.")
                     self.root.after(0, on_finish)
                 threading.Thread(target=worker, daemon=True).start()
 
@@ -416,17 +430,19 @@ class SentinelGUI:
         MonitorDialog(self.root, self.channel_registry, monitor=mon, on_save=on_save)
 
     def _open_add_channel_dialog(self):
-        def on_save(name, url, token, _):
-            self.channel_registry.add_channel(name, url, auth_token=token)
+        def on_save(name, url, token, channel_type="ntfy", chat_id=None, _=None):
+            self.channel_registry.add_channel(name, url, auth_token=token, channel_type=channel_type, chat_id=chat_id)
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=None, on_save=on_save)
 
     def _open_edit_channel_dialog(self, channel: NotificationChannel):
-        def on_save(name, url, token, cid):
+        def on_save(name, url, token, channel_type="ntfy", chat_id=None, cid=None):
             channel.name = name
             channel.url = url
             channel.auth_token = token
+            channel.channel_type = channel_type
+            channel.chat_id = chat_id
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=channel, on_save=on_save)

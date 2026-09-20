@@ -24,54 +24,193 @@ class ChannelDialog(ctk.CTkToplevel):
         self.on_save = on_save
 
         self.title("Edit Channel" if channel else "Add Notification Channel")
-        self.geometry("480x350")
+        self.geometry("500x480")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
 
+        self.type_options = {
+            "ntfy.sh (Push Notifications)": "ntfy",
+            "Telegram Bot": "telegram",
+            "Discord Webhook": "discord",
+            "Slack Webhook": "slack"
+        }
+        self.reverse_type_options = {v: k for k, v in self.type_options.items()}
+
         self._build_ui()
 
     def _build_ui(self):
-        pad = {"padx": 15, "pady": 6}
+        pad = {"padx": 15, "pady": 4}
         ctk.CTkLabel(self, text="Channel Alias Name:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
-        self.name_entry = ctk.CTkEntry(self, width=440, placeholder_text="e.g. My Phone, Lab IT Alerts")
+        self.name_entry = ctk.CTkEntry(self, width=470, placeholder_text="e.g. My Phone, Lab IT Alerts, Ops Chat")
         self.name_entry.pack(anchor="w", padx=15)
         if self.channel:
             self.name_entry.insert(0, self.channel.name)
 
-        ctk.CTkLabel(self, text="ntfy.sh Topic URL:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
-        self.url_entry = ctk.CTkEntry(self, width=440, placeholder_text="e.g. https://ntfy.sh/my_private_topic")
-        self.url_entry.pack(anchor="w", padx=15)
-        if self.channel:
-            self.url_entry.insert(0, self.channel.url)
+        ctk.CTkLabel(self, text="Channel Type / Provider:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+        cur_type = self.channel.channel_type if self.channel else "ntfy"
+        init_type_display = self.reverse_type_options.get(cur_type, "ntfy.sh (Push Notifications)")
+        self.type_var = ctk.StringVar(value=init_type_display)
+        self.type_menu = ctk.CTkOptionMenu(
+            self,
+            values=list(self.type_options.keys()),
+            variable=self.type_var,
+            command=self._on_type_changed,
+            width=470
+        )
+        self.type_menu.pack(anchor="w", padx=15)
 
-        ctk.CTkLabel(self, text="Access Token (Optional - for private / self-hosted topics):", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
-        self.token_entry = ctk.CTkEntry(self, width=440, placeholder_text="e.g. tk_... (leave empty for public topics)", show="*")
-        self.token_entry.pack(anchor="w", padx=15)
-        if self.channel and self.channel.auth_token:
-            self.token_entry.insert(0, self.channel.auth_token)
+        # Dynamic fields container
+        self.fields_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.fields_container.pack(fill="x", pady=6)
 
-        self.show_token_var = ctk.BooleanVar(value=False)
-        def toggle_token():
-            self.token_entry.configure(show="" if self.show_token_var.get() else "*")
-        ctk.CTkCheckBox(self, text="Show Token", variable=self.show_token_var, command=toggle_token, font=("Segoe UI", 11)).pack(anchor="w", padx=15, pady=(4, 0))
+        self._render_fields()
 
+        # Bottom buttons
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=15, pady=(15, 10))
+
+        self.test_btn = ctk.CTkButton(btn_frame, text="⚡ Test Alert", command=self._send_test_alert, width=110, fg_color="#1f6aa5", hover_color="#144f7a")
+        self.test_btn.pack(side="left")
 
         ctk.CTkButton(btn_frame, text="Save Channel", command=self._save, width=120).pack(side="right", padx=5)
         ctk.CTkButton(btn_frame, text="Cancel", command=self.destroy, fg_color="gray", width=90).pack(side="right", padx=5)
 
+    def _on_type_changed(self, choice):
+        self._render_fields()
+
+    def _render_fields(self):
+        for w in self.fields_container.winfo_children():
+            w.destroy()
+
+        selected_code = self.type_options.get(self.type_var.get(), "ntfy")
+        pad = {"padx": 15, "pady": 4}
+
+        if selected_code == "ntfy":
+            ctk.CTkLabel(self.fields_container, text="ntfy.sh Topic URL:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+            self.url_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="e.g. https://ntfy.sh/my_private_topic")
+            self.url_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.channel_type == "ntfy":
+                self.url_entry.insert(0, self.channel.url)
+
+            ctk.CTkLabel(self.fields_container, text="Access Token (Optional - for private / self-hosted topics):", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+            self.token_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="e.g. tk_... (leave empty for public topics)", show="*")
+            self.token_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.channel_type == "ntfy" and self.channel.auth_token:
+                self.token_entry.insert(0, self.channel.auth_token)
+
+            self.show_token_var = ctk.BooleanVar(value=False)
+            def toggle_token():
+                self.token_entry.configure(show="" if self.show_token_var.get() else "*")
+            ctk.CTkCheckBox(self.fields_container, text="Show Token", variable=self.show_token_var, command=toggle_token, font=("Segoe UI", 11)).pack(anchor="w", padx=15, pady=(4, 0))
+
+        elif selected_code == "telegram":
+            ctk.CTkLabel(self.fields_container, text="Telegram Bot Token:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+            self.token_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="e.g. 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ", show="*")
+            self.token_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.auth_token:
+                self.token_entry.insert(0, self.channel.auth_token)
+
+            self.show_token_var = ctk.BooleanVar(value=False)
+            def toggle_token():
+                self.token_entry.configure(show="" if self.show_token_var.get() else "*")
+            ctk.CTkCheckBox(self.fields_container, text="Show Bot Token", variable=self.show_token_var, command=toggle_token, font=("Segoe UI", 11)).pack(anchor="w", padx=15, pady=(4, 0))
+
+            ctk.CTkLabel(self.fields_container, text="Telegram Chat ID (User, Group, or Channel):", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+            self.chat_id_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="e.g. 987654321 or -100123456789")
+            self.chat_id_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.chat_id:
+                self.chat_id_entry.insert(0, self.channel.chat_id)
+
+            ctk.CTkLabel(self.fields_container, text="Custom API URL (Optional - leave empty for official Telegram API):", font=("Segoe UI", 11)).pack(anchor="w", **pad)
+            self.url_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="https://api.telegram.org (leave empty for default)")
+            self.url_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.channel_type == "telegram" and self.channel.url:
+                self.url_entry.insert(0, self.channel.url)
+
+        elif selected_code == "discord":
+            ctk.CTkLabel(self.fields_container, text="Discord Webhook URL:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+            self.url_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="e.g. https://discord.com/api/webhooks/...")
+            self.url_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.channel_type == "discord":
+                self.url_entry.insert(0, self.channel.url)
+
+        elif selected_code == "slack":
+            ctk.CTkLabel(self.fields_container, text="Slack Webhook URL:", font=("Segoe UI", 12, "bold")).pack(anchor="w", **pad)
+            self.url_entry = ctk.CTkEntry(self.fields_container, width=470, placeholder_text="e.g. https://hooks.slack.com/services/...")
+            self.url_entry.pack(anchor="w", padx=15)
+            if self.channel and self.channel.channel_type == "slack":
+                self.url_entry.insert(0, self.channel.url)
+
+    def _send_test_alert(self):
+        name = self.name_entry.get().strip() or "Test Channel"
+        ctype = self.type_options.get(self.type_var.get(), "ntfy")
+        url = self.url_entry.get().strip() if hasattr(self, "url_entry") else ""
+        token = self.token_entry.get().strip() if hasattr(self, "token_entry") else None
+        chat_id = self.chat_id_entry.get().strip() if hasattr(self, "chat_id_entry") else None
+
+        if ctype == "telegram":
+            if not token or not chat_id:
+                messagebox.showerror("Validation Error", "Both Bot Token and Chat ID are required to send a Telegram test alert.")
+                return
+        elif ctype in ("ntfy", "discord", "slack"):
+            if not url:
+                messagebox.showerror("Validation Error", f"Endpoint URL is required for {self.type_var.get()}.")
+                return
+
+        temp_chan = NotificationChannel(
+            name=name,
+            url=url,
+            channel_type=ctype,
+            auth_token=token or None,
+            chat_id=chat_id or None
+        )
+
+        self.test_btn.configure(text="Sending...", state="disabled", fg_color="#d97706")
+
+        def worker():
+            ok = temp_chan.send(
+                message="Test alert from ProcessSentinel channel configuration!",
+                title="Channel Test",
+                priority=3
+            )
+            def on_finish():
+                self.test_btn.configure(text="⚡ Test Alert", state="normal", fg_color="#1f6aa5")
+                if ok:
+                    messagebox.showinfo("Success", f"Test alert successfully delivered via {self.type_var.get()}!")
+                else:
+                    messagebox.showerror("Error", f"Failed delivering test alert via {self.type_var.get()}.\nCheck endpoint and credentials.")
+            self.after(0, on_finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def _save(self):
         name = self.name_entry.get().strip()
-        url = self.url_entry.get().strip()
-        token = self.token_entry.get().strip() or None
-        if not name or not url:
-            messagebox.showerror("Validation Error", "Both Channel Name and Topic URL are required.")
+        ctype = self.type_options.get(self.type_var.get(), "ntfy")
+        url = self.url_entry.get().strip() if hasattr(self, "url_entry") else ""
+        token = self.token_entry.get().strip() if hasattr(self, "token_entry") else None
+        chat_id = self.chat_id_entry.get().strip() if hasattr(self, "chat_id_entry") else None
+
+        if not name:
+            messagebox.showerror("Validation Error", "Channel Alias Name is required.")
             return
 
+        if ctype == "telegram":
+            if not token or not chat_id:
+                messagebox.showerror("Validation Error", "Both Bot Token and Chat ID are required for Telegram channels.")
+                return
+        elif ctype in ("ntfy", "discord", "slack"):
+            if not url:
+                messagebox.showerror("Validation Error", "Endpoint URL is required.")
+                return
+
         if self.on_save:
-            self.on_save(name, url, token, self.channel.id if self.channel else None)
+            cid = self.channel.id if self.channel else None
+            try:
+                self.on_save(name, url, token, ctype, chat_id, cid)
+            except TypeError:
+                self.on_save(name, url, token, cid)
+
         self.destroy()
 
 

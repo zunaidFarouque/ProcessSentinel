@@ -112,6 +112,10 @@ class BaseMonitor:
                 engine.log(f"Action command error for '{self.name}': {e}", level="error")
             return summary
 
+    def execute_action(self, engine=None) -> Optional[str]:
+        """Alias for execute_trigger_action."""
+        return self.execute_trigger_action(engine=engine)
+
     def check(self, engine, channel_registry) -> None:
         """Executes the monitoring condition check. Must update status_text and status_level."""
         raise NotImplementedError

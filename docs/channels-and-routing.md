@@ -1,6 +1,17 @@
 # Notification Channels & Alert Routing
 
-ProcessSentinel 2.0 features a multi-channel alert routing engine. You can configure multiple destination topics on `ntfy.sh` (or your private ntfy server) and direct different types of alerts to different recipients.
+ProcessSentinel features a flexible multi-channel alert routing engine. You can configure multiple destination endpoints across **ntfy.sh**, **Telegram**, **Discord**, and **Slack**, directing different types of alerts to different recipients and shared team channels.
+
+---
+
+## 📡 Supported Providers
+
+| Provider | Configuration Fields | Use Case |
+| :--- | :--- | :--- |
+| **ntfy.sh** | Topic URL (e.g. `https://ntfy.sh/my_alerts`), Optional Access Token | Instant push notifications to Android, iOS, and Web. |
+| **Telegram Bot** | Bot API Token (from `@BotFather`), Chat ID (Group or User) | Direct group/channel messaging within Telegram. |
+| **Discord Webhook** | Discord Webhook URL (`https://discord.com/api/webhooks/...`) | Team alerts in dedicated Discord server channels. |
+| **Slack Webhook** | Slack Incoming Webhook URL (`https://hooks.slack.com/services/...`) | Incident notifications in Slack team workspaces. |
 
 ---
 
@@ -9,7 +20,8 @@ ProcessSentinel 2.0 features a multi-channel alert routing engine. You can confi
 ### 1. Topic Aliases
 Instead of hardcoding raw URLs across your rules, ProcessSentinel introduces **Channels with Aliases**. A channel consists of:
 * **Friendly Name**: (e.g. `"My Phone"`, `"Research Lab Channel"`, `"Emergency Server On-Call"`).
-* **Topic URL**: The full endpoint destination (e.g. `https://ntfy.sh/ps-lab-x9948`).
+* **Provider Type**: ntfy.sh, Telegram, Discord, or Slack.
+* **Credentials / Endpoint**: Dedicated connection details per provider.
 
 ### 2. The Default Channel
 One channel is designated as the **Default Channel** (`[Default]`).
@@ -18,8 +30,16 @@ One channel is designated as the **Default Channel** (`[Default]`).
 
 ### 3. Per-Monitor Channel Overrides
 You can assign specific monitors to distinct channels:
-* Send routine batch completion updates to your personal phone.
-* Send critical server or storage failures to a shared lab team topic or an on-call phone.
+* Send routine batch completion updates to your personal phone or Telegram.
+* Send critical server, GPU, or storage failures to a shared lab team Discord or Slack channel.
+
+---
+
+## ⚡ Remote Action Listener
+
+ProcessSentinel includes an optional **Remote Command Listener** that securely listens for push commands:
+* **Actions Supported**: `run_action` (triggers a monitor's configured self-healing script), `reset` (flushes state/latches), and `check_now` (forces immediate inspection).
+* **Security**: Enforces token authentication (`auth_token` / shared secret) to guarantee only authorized commands are executed.
 
 ---
 
