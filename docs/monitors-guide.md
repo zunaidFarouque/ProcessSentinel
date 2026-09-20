@@ -91,7 +91,7 @@ Evaluates free storage space in Gigabytes (GB). Alerts are escalated across thre
 * **Critical Tier**: Urgent reminder to clear temporary files.
 * **Fatal Tier**: Highest priority alert when disk is almost completely exhausted.
 
-To prevent alert flooding, once a tier triggers, it will not repeat until storage fluctuates or state is reset.
+To prevent alert flooding, ProcessSentinel features **Step-Down Latching**: once a tier triggers, it stays latched and will not re-alert as disk space fluctuates near the threshold. It only re-arms upon manual `[↺ Reset State]` or when free space climbs safely above the hysteresis margin (`threshold + 5.0 GB`).
 
 ### Parameters
 | Parameter | Type | Default | Description |
@@ -100,6 +100,7 @@ To prevent alert flooding, once a tier triggers, it will not repeat until storag
 | **Warning Tier (GB)** | Float | `30.0` | Triggers when free space falls below this number of GB. |
 | **Critical Tier (GB)** | Float | `20.0` | Triggers when free space falls below this number of GB. |
 | **Fatal Tier (GB)** | Float | `10.0` | Triggers when free space falls below this number of GB. |
+| **Step-Down Latching** | Checkbox | `True` | When enabled, alerts strictly once per tier as space descends, debouncing minor fluctuations until reset. |
 
 ---
 

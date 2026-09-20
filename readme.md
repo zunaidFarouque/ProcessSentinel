@@ -29,18 +29,22 @@ Comprehensive documentation is available in the [`docs/`](docs/index.md) directo
 
 ### 2. Rich Monitor Types
 * **Process Step-Down (High-Watermark)**: Stateful instance and visible window tracking. Alerts once for each downward step (e.g. 3 -> 2 -> 1) without duplicate alert spam, plus critical alerts when all instances terminate.
+* **Storage Free Space (Multi-Tier & Step-Down Latching)**: Cascading storage warnings on any drive (e.g., 30 GB Warning, 20 GB Critical, 10 GB Fatal). Features optional **Step-Down Latching** to alert strictly once per threshold and debounce minor disk space fluctuations.
 * **Process Instance Count**: Monitored thresholds for headless daemons or workers (alerts when instances go below, above, or equal a target).
 * **I/O Heartbeat**: Multi-path directory stall detection with file extension glob filtering (`*.shp`, `*.gdb`, `*.csv`). Alerts when no matching files are modified within a specified timeout.
-* **Storage Free Space (Multi-Tier)**: Cascading storage warnings on any drive (e.g., 30 GB Warning, 20 GB Critical, 10 GB Fatal) with per-tier messages and optional channel overrides.
 * **Process Resource Usage**: Monitors CPU % and RAM (MB) to detect "zombie" hung processes (CPU floor) or memory leaks (RAM ceiling).
 * **Directory Size Watcher**: Prevents folder cache bloat (e.g., scratch folders or temporary data exceeding a size limit).
 * **HTTP Endpoint Check**: Pings local or remote web APIs to verify health status.
 * **Local Network Port Check**: Verifies that database or service ports (Postgres, Redis, custom sockets) remain open.
 
 ### 3. Interactive Management & State Control
+* **Windows System Tray & Background Guard**: Minimizes seamlessly to the Windows Notification Area tray; keeps surveillance running 24/7 without accidental window closures.
+* **Auto-Start Engine on Boot/Launch**: Configurable setting to engage monitoring immediately upon app launch.
+* **Auto-Recovery ("Resolved") Notifications**: Optional recovery alerts when previously failing endpoints, ports, or processes return to normal healthy states.
+* **Instant Monitor Cloning & Live Search**: One-click `[📋 Clone]` button to duplicate rules and live keyword filtering by name or tag across large monitor fleets.
 * **Manual State Reset**: Flush a monitor's alert memory (`[↺ Reset State]`) directly from the UI to re-arm notifications after resolving an issue.
-* **Live Activity Stream**: Real-time event log tab showing checks, triggers, and notification deliveries.
-* **Object-Oriented Configuration**: Full JSON serialization of all channels and monitors via `config.json`.
+* **Persistent Disk & Activity Logging**: Dual logging to an in-memory live stream and a rotating persistent log file (`logs/sentinel.log`).
+* **Object-Oriented Configuration**: Full JSON serialization of all channels, monitors, and app settings via `config.json`.
 
 ---
 

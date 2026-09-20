@@ -25,7 +25,11 @@ class StorageMultiTierMonitor(BaseMonitor):
         tags: str = "floppy_disk",
         title_template: Optional[str] = None,
         click_url: Optional[str] = None,
-        markdown_enabled: bool = True
+        markdown_enabled: bool = True,
+        recovery_notification: bool = False,
+        recovery_message: Optional[str] = None,
+        step_down_mode: bool = True,
+        recovery_margin_gb: float = 5.0
     ):
         super().__init__(
             name=name,
@@ -37,7 +41,9 @@ class StorageMultiTierMonitor(BaseMonitor):
             tags=tags,
             title_template=title_template,
             click_url=click_url,
-            markdown_enabled=markdown_enabled
+            markdown_enabled=markdown_enabled,
+            recovery_notification=recovery_notification,
+            recovery_message=recovery_message
         )
         self.drive = drive.strip()
         self.tiers = tiers or [
@@ -47,6 +53,8 @@ class StorageMultiTierMonitor(BaseMonitor):
         ]
         self.tiers.sort(key=lambda t: float(t.get("gb", 0)), reverse=True)
         self.triggered_tiers: Set[float] = set()
+        self.step_down_mode = bool(step_down_mode)
+        self.recovery_margin_gb = float(recovery_margin_gb)
 
     def check(self, engine, channel_registry) -> None:
         try:
@@ -84,11 +92,18 @@ class StorageMultiTierMonitor(BaseMonitor):
                     )
                     self.triggered_tiers.add(threshold_gb)
             else:
-                self.triggered_tiers.discard(threshold_gb)
+                if self.step_down_mode:
+                    if free_gb >= (threshold_gb + self.recovery_margin_gb):
+                        self.triggered_tiers.discard(threshold_gb)
+                else:
+                    self.triggered_tiers.discard(threshold_gb)
 
         if highest_triggered_level != "ok":
             self.status_text = f"Alert: {free_gb:.1f} GB free on {self.drive}"
             self.status_level = highest_triggered_level
+        elif self.triggered_tiers:
+            self.status_text = f"Alert (Latched): {free_gb:.1f} GB free on {self.drive}"
+            self.status_level = "warning"
         else:
             self.status_text = f"OK: {free_gb:.1f} GB free on {self.drive}"
             self.status_level = "ok"
@@ -102,7 +117,9 @@ class StorageMultiTierMonitor(BaseMonitor):
         data = super().to_dict()
         data.update({
             "drive": self.drive,
-            "tiers": self.tiers
+            "tiers": self.tiers,
+            "step_down_mode": self.step_down_mode,
+            "recovery_margin_gb": self.recovery_margin_gb
         })
         return data
 
@@ -120,7 +137,11 @@ class StorageMultiTierMonitor(BaseMonitor):
             tags=data.get("tags", "floppy_disk"),
             title_template=data.get("title_template"),
             click_url=data.get("click_url"),
-            markdown_enabled=data.get("markdown_enabled", True)
+            markdown_enabled=data.get("markdown_enabled", True),
+            recovery_notification=data.get("recovery_notification", False),
+            recovery_message=data.get("recovery_message"),
+            step_down_mode=data.get("step_down_mode", True),
+            recovery_margin_gb=float(data.get("recovery_margin_gb", 5.0))
         )
 
 
@@ -143,7 +164,9 @@ class DirectorySizeMonitor(BaseMonitor):
         tags: str = "file_folder,warning",
         title_template: Optional[str] = None,
         click_url: Optional[str] = None,
-        markdown_enabled: bool = True
+        markdown_enabled: bool = True,
+        recovery_notification: bool = False,
+        recovery_message: Optional[str] = None
     ):
         super().__init__(
             name=name,
@@ -155,7 +178,9 @@ class DirectorySizeMonitor(BaseMonitor):
             tags=tags,
             title_template=title_template,
             click_url=click_url,
-            markdown_enabled=markdown_enabled
+            markdown_enabled=markdown_enabled,
+            recovery_notification=recovery_notification,
+            recovery_message=recovery_message
         )
         self.path = path.strip()
         self.max_size_gb = float(max_size_gb)
@@ -233,5 +258,7 @@ class DirectorySizeMonitor(BaseMonitor):
             tags=data.get("tags", "file_folder,warning"),
             title_template=data.get("title_template"),
             click_url=data.get("click_url"),
-            markdown_enabled=data.get("markdown_enabled", True)
+            markdown_enabled=data.get("markdown_enabled", True),
+            recovery_notification=data.get("recovery_notification", False),
+            recovery_message=data.get("recovery_message")
         )

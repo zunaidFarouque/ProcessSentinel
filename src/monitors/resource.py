@@ -27,7 +27,9 @@ class ResourceMonitor(BaseMonitor):
         tags: str = "",
         title_template: Optional[str] = None,
         click_url: Optional[str] = None,
-        markdown_enabled: bool = True
+        markdown_enabled: bool = True,
+        recovery_notification: bool = False,
+        recovery_message: Optional[str] = None
     ):
         super().__init__(
             name=name,
@@ -39,7 +41,9 @@ class ResourceMonitor(BaseMonitor):
             tags=tags,
             title_template=title_template,
             click_url=click_url,
-            markdown_enabled=markdown_enabled
+            markdown_enabled=markdown_enabled,
+            recovery_notification=recovery_notification,
+            recovery_message=recovery_message
         )
         self.target = target.strip()
         self.metric = metric
@@ -115,6 +119,17 @@ class ResourceMonitor(BaseMonitor):
             self.status_text = f"Triggered: {self.target} {self.metric}={val:.1f}{unit} ({self.condition} {self.threshold}{unit})"
             self.status_level = "warning"
         else:
+            if self.alerted and self.recovery_notification:
+                rec_msg = self.recovery_message or f"Process '{self.target}' {self.metric} returned to normal ({val:.1f}{unit})."
+                rec_title = self.format_title(
+                    f"{self.name}: Recovered",
+                    target=self.target,
+                    metric=self.metric,
+                    val=val,
+                    condition=self.condition,
+                    threshold=self.threshold
+                )
+                self.send_recovery_alert(channel_registry, message=rec_msg, title=rec_title, tags="white_check_mark,recycle")
             self.alerted = False
             self.status_text = f"OK: {self.target} {self.metric}={val:.1f}{unit}"
             self.status_level = "ok"
@@ -152,5 +167,7 @@ class ResourceMonitor(BaseMonitor):
             tags=data.get("tags", ""),
             title_template=data.get("title_template"),
             click_url=data.get("click_url"),
-            markdown_enabled=data.get("markdown_enabled", True)
+            markdown_enabled=data.get("markdown_enabled", True),
+            recovery_notification=data.get("recovery_notification", False),
+            recovery_message=data.get("recovery_message")
         )

@@ -28,7 +28,9 @@ class IOMonitor(BaseMonitor):
         tags: str = "warning,hourglass_done",
         title_template: Optional[str] = None,
         click_url: Optional[str] = None,
-        markdown_enabled: bool = True
+        markdown_enabled: bool = True,
+        recovery_notification: bool = False,
+        recovery_message: Optional[str] = None
     ):
         super().__init__(
             name=name,
@@ -40,7 +42,9 @@ class IOMonitor(BaseMonitor):
             tags=tags,
             title_template=title_template,
             click_url=click_url,
-            markdown_enabled=markdown_enabled
+            markdown_enabled=markdown_enabled,
+            recovery_notification=recovery_notification,
+            recovery_message=recovery_message
         )
         self.paths = [p.strip() for p in paths if p.strip()]
         self.filters = [f.strip().lower() for f in (filters or ["*.*"]) if f.strip()]
@@ -140,5 +144,7 @@ class IOMonitor(BaseMonitor):
             tags=data.get("tags", "warning,hourglass_done"),
             title_template=data.get("title_template"),
             click_url=data.get("click_url"),
-            markdown_enabled=data.get("markdown_enabled", True)
+            markdown_enabled=data.get("markdown_enabled", True),
+            recovery_notification=data.get("recovery_notification", False),
+            recovery_message=data.get("recovery_message")
         )

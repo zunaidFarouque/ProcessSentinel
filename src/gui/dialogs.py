@@ -295,6 +295,10 @@ class MonitorDialog(ctk.CTkToplevel):
         self.markdown_var = ctk.BooleanVar(value=self.monitor.markdown_enabled if self.monitor else True)
         ctk.CTkSwitch(container, text="Enable Markdown formatting in notification body", variable=self.markdown_var, font=("Segoe UI", 11)).pack(anchor="w", padx=10, pady=(8, 4))
 
+        # Recovery Notification Switch
+        self.recovery_var = ctk.BooleanVar(value=getattr(self.monitor, "recovery_notification", False) if self.monitor else False)
+        ctk.CTkSwitch(container, text="Send Recovery Notification when condition resolves / returns to normal", variable=self.recovery_var, font=("Segoe UI", 11)).pack(anchor="w", padx=10, pady=(4, 6))
+
         # Phone Simulation Preview Card
         ctk.CTkLabel(container, text="📱 Notification Preview (Mobile Banner Simulation):", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=10, pady=(10, 2))
         self.preview_card = ctk.CTkFrame(container, fg_color="#121212", corner_radius=8, border_width=1, border_color="#333333")
@@ -623,6 +627,14 @@ class MonitorDialog(ctk.CTkToplevel):
             self.tier3_prio_var = ctk.StringVar(value=self.reverse_priority_map.get(t3_prio, "Urgent (5)"))
             ctk.CTkOptionMenu(row3, values=tier_prio_options, variable=self.tier3_prio_var, width=130, command=lambda v: self._refresh_preview()).pack(side="left")
 
+            self.step_down_var = ctk.BooleanVar(value=getattr(m, "step_down_mode", True) if m else True)
+            ctk.CTkCheckBox(
+                self.dynamic_frame,
+                text="Step-Down Latching (Alert once per threshold until manual reset or recovery)",
+                variable=self.step_down_var,
+                font=("Segoe UI", 11, "bold")
+            ).pack(anchor="w", pady=(8, 2))
+
         elif selected_code == "ResourceMonitor":
             ctk.CTkLabel(self.dynamic_frame, text="Target Process Name:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(5, 2))
             self.target_entry = ctk.CTkEntry(self.dynamic_frame, width=540, placeholder_text="e.g. ArcGISPro.exe")
@@ -713,6 +725,7 @@ class MonitorDialog(ctk.CTkToplevel):
         custom_title = self.notif_title_entry.get().strip() or None
         custom_click = self.click_url_entry.get().strip() or None
         markdown_enabled = self.markdown_var.get()
+        recovery_notif = self.recovery_var.get()
         custom_msg = self.notif_msg_entry.get().strip()
 
         try:
@@ -734,7 +747,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "skull,rotating_light",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "ProcessInstance":
@@ -756,7 +770,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "warning,gear",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "IOMonitor":
@@ -778,7 +793,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "warning,hourglass_done",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "StorageMultiTier":
@@ -805,7 +821,9 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "floppy_disk",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    step_down_mode=self.step_down_var.get(),
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "ResourceMonitor":
@@ -827,7 +845,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags,
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "DirectorySize":
@@ -847,7 +866,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "file_folder,warning",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "HTTPEndpoint":
@@ -867,7 +887,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "globe_with_meridians,warning",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             elif selected_code == "LocalPort":
@@ -886,7 +907,8 @@ class MonitorDialog(ctk.CTkToplevel):
                     tags=custom_tags or "electric_plug,warning",
                     title_template=custom_title,
                     click_url=custom_click,
-                    markdown_enabled=markdown_enabled
+                    markdown_enabled=markdown_enabled,
+                    recovery_notification=recovery_notif
                 )
 
             if self.on_save:

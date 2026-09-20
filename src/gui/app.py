@@ -8,19 +8,22 @@ import customtkinter as ctk
 from channels import ChannelRegistry, NotificationChannel
 from config_manager import ConfigManager, CONFIG_FILE
 from engine import MonitorEngine
+from monitors import create_monitor_from_dict
 from monitors.base import BaseMonitor
 from gui.dialogs import ChannelDialog, MonitorDialog
+from gui.tray import Win32SystemTray
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 class SentinelGUI:
-    """Modern CustomTkinter Dashboard for ProcessSentinel v2.0."""
+    """Modern CustomTkinter Dashboard for ProcessSentinel 2.0."""
     def __init__(self, root: ctk.CTk, engine: MonitorEngine, channel_registry: ChannelRegistry, save_callback):
         self.root = root
         self.engine = engine
         self.channel_registry = channel_registry
         self.save_callback = save_callback
+        self.settings = ConfigManager.get_settings()
 
         self.root.title("ProcessSentinel 2.0 - Lab Watchdog Engine")
         self.root.geometry("960x760")
@@ -30,9 +33,26 @@ class SentinelGUI:
         self.engine.on_monitor_updated = self._on_engine_monitor_updated
         self.engine.on_log_message = self._on_engine_log_message
 
+        # System Tray initialization
+        self.tray = Win32SystemTray(
+            tooltip="ProcessSentinel 2.0 • IDLE",
+            on_show=self._show_from_tray,
+            on_toggle_engine=lambda: self.root.after(0, self._toggle_engine),
+            on_check_all=lambda: self.root.after(0, self._check_all_now),
+            on_quit=lambda: self.root.after(0, self._quit_app),
+        )
+        self.tray.start()
+
+        # Intercept window close to minimize to tray if enabled
+        self.root.protocol("WM_DELETE_WINDOW", self._on_window_close)
+
         self._build_main_ui()
         self._refresh_monitors_list()
         self._refresh_channels_list()
+
+        # Auto-start engine if configured
+        if self.settings.get("auto_start_engine", False):
+            self.root.after(400, self._toggle_engine)
 
     def _build_main_ui(self):
         # Top Header Bar
@@ -57,6 +77,7 @@ class SentinelGUI:
         ctk.CTkButton(ctrl_frame, text="📥 Import", command=self._import_config, width=80, fg_color="#495057", hover_color="#5a6268").pack(side="left", padx=3)
         ctk.CTkButton(ctrl_frame, text="📤 Export", command=self._export_config, width=80, fg_color="#364fc7", hover_color="#4263eb").pack(side="left", padx=3)
         ctk.CTkButton(ctrl_frame, text="💾 Save", command=self._save_config, width=75, fg_color="#2b8a3e", hover_color="#2f9e44").pack(side="left", padx=3)
+        ctk.CTkButton(ctrl_frame, text="⚙ Settings", command=self._open_settings_dialog, width=85, fg_color="#495057", hover_color="#5a6268").pack(side="left", padx=3)
         ctk.CTkButton(ctrl_frame, text="❓ Help", command=self._open_help, width=75, fg_color="#099268", hover_color="#0ca678").pack(side="left", padx=3)
 
         # Main Tabview
@@ -81,6 +102,10 @@ class SentinelGUI:
         self.mon_count_lbl = ctk.CTkLabel(top_bar, text="Monitors: 0", font=("Segoe UI", 13, "bold"))
         self.mon_count_lbl.pack(side="left")
 
+        self.search_entry = ctk.CTkEntry(top_bar, placeholder_text="🔍 Filter monitors by name, tag, or type...", width=270)
+        self.search_entry.pack(side="left", padx=(15, 0))
+        self.search_entry.bind("<KeyRelease>", lambda e: self._refresh_monitors_list())
+
         ctk.CTkButton(top_bar, text="+ Add New Monitor", command=self._open_add_monitor_dialog, width=150, fg_color="#1f6aa5").pack(side="right", padx=5)
         ctk.CTkButton(top_bar, text="⚡ Check All Now", command=self._check_all_now, width=120, fg_color="gray40").pack(side="right", padx=5)
 
@@ -91,15 +116,33 @@ class SentinelGUI:
         for w in self.monitors_scroll.winfo_children():
             w.destroy()
 
-        self.mon_count_lbl.configure(text=f"Active Monitors ({len(self.engine.monitors)} configured)")
+        search_query = self.search_entry.get().strip().lower() if hasattr(self, "search_entry") else ""
 
-        if not self.engine.monitors:
-            empty_lbl = ctk.CTkLabel(self.monitors_scroll, text="No monitors configured yet. Click '+ Add New Monitor' above.", text_color="gray60")
-            empty_lbl.pack(pady=40)
-            return
-
+        matching_monitors = []
         for mon in self.engine.monitors:
-            self._create_monitor_card(mon)
+            if search_query:
+                in_name = search_query in mon.name.lower()
+                in_tags = search_query in (mon.tags or "").lower()
+                in_type = search_query in mon.display_name.lower()
+                if not (in_name or in_tags or in_type):
+                    continue
+            matching_monitors.append(mon)
+
+        count_text = f"Active Monitors ({len(self.engine.monitors)} configured)"
+        if search_query:
+            count_text += f" • {len(matching_monitors)} matching"
+        self.mon_count_lbl.configure(text=count_text)
+
+        if not matching_monitors:
+            msg = f"No monitors match '{search_query}'." if search_query else "No monitors configured yet. Click '+ Add New Monitor' above."
+            empty_lbl = ctk.CTkLabel(self.monitors_scroll, text=msg, text_color="gray60")
+            empty_lbl.pack(pady=40)
+        else:
+            for mon in matching_monitors:
+                self._create_monitor_card(mon)
+
+        if hasattr(self, "tray"):
+            self.tray.update_status(self.engine.is_running(), len(self.engine.monitors))
 
     def _create_monitor_card(self, mon: BaseMonitor):
         card = ctk.CTkFrame(self.monitors_scroll, corner_radius=8, fg_color="#242424")
@@ -179,6 +222,11 @@ class SentinelGUI:
             self._open_edit_monitor_dialog(mon)
         btn_edit = ctk.CTkButton(act_row, text="✏ Edit", width=70, height=26, fg_color="#3d3d3d", hover_color="#505050", command=on_edit)
         btn_edit.pack(side="left", padx=4)
+
+        def on_clone():
+            self._open_clone_monitor_dialog(mon)
+        btn_clone = ctk.CTkButton(act_row, text="📋 Clone", width=70, height=26, fg_color="#3d3d3d", hover_color="#505050", command=on_clone)
+        btn_clone.pack(side="left", padx=4)
 
         def on_del():
             if messagebox.askyesno("Confirm Delete", f"Delete monitor '{mon.name}'?"):
@@ -286,6 +334,8 @@ class SentinelGUI:
             self.engine.start()
             self.engine_status_lbl.configure(text="● RUNNING", text_color="#38b000")
             self.btn_toggle_engine.configure(text="⏹ STOP ENGINE", fg_color="#d90429")
+        if hasattr(self, "tray"):
+            self.tray.update_status(self.engine.is_running(), len(self.engine.monitors))
 
     def _check_all_now(self):
         for m in self.engine.monitors:
@@ -380,6 +430,70 @@ class SentinelGUI:
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=channel, on_save=on_save)
+
+    def _open_clone_monitor_dialog(self, mon: BaseMonitor):
+        data = mon.to_dict()
+        data["id"] = None
+        data["name"] = f"{mon.name} (Copy)"
+        cloned = create_monitor_from_dict(data)
+
+        def on_save(new_mon):
+            self.engine.add_monitor(new_mon)
+            self._refresh_monitors_list()
+
+        MonitorDialog(self.root, self.channel_registry, monitor=cloned, on_save=on_save)
+
+    def _open_settings_dialog(self):
+        dlg = ctk.CTkToplevel(self.root)
+        dlg.title("Application Settings")
+        dlg.geometry("450x260")
+        dlg.resizable(False, False)
+        dlg.transient(self.root)
+        dlg.grab_set()
+
+        ctk.CTkLabel(dlg, text="General Watchdog Settings", font=("Segoe UI", 14, "bold")).pack(anchor="w", padx=20, pady=(15, 10))
+
+        min_tray_var = ctk.BooleanVar(value=self.settings.get("minimize_to_tray", True))
+        ctk.CTkCheckBox(dlg, text="Minimize to Windows System Tray on close", variable=min_tray_var, font=("Segoe UI", 12)).pack(anchor="w", padx=20, pady=8)
+
+        auto_start_var = ctk.BooleanVar(value=self.settings.get("auto_start_engine", False))
+        ctk.CTkCheckBox(dlg, text="Automatically start monitoring engine on launch", variable=auto_start_var, font=("Segoe UI", 12)).pack(anchor="w", padx=20, pady=8)
+
+        btn_frame = ctk.CTkFrame(dlg, fg_color="transparent")
+        btn_frame.pack(fill="x", padx=20, pady=(25, 10))
+
+        def save_settings():
+            self.settings["minimize_to_tray"] = min_tray_var.get()
+            self.settings["auto_start_engine"] = auto_start_var.get()
+            ConfigManager.set_settings(self.settings)
+            self.save_callback()
+            dlg.destroy()
+            messagebox.showinfo("Settings Saved", "Settings saved successfully!")
+
+        ctk.CTkButton(btn_frame, text="Save Settings", command=save_settings, width=120, fg_color="#1f6aa5").pack(side="right", padx=5)
+        ctk.CTkButton(btn_frame, text="Cancel", command=dlg.destroy, width=80, fg_color="gray").pack(side="right", padx=5)
+
+    def _on_window_close(self):
+        if self.settings.get("minimize_to_tray", True):
+            self.root.withdraw()
+            self.engine.log("Dashboard minimized to system tray. Use tray icon to restore.", level="info")
+        else:
+            self._quit_app()
+
+    def _show_from_tray(self):
+        self.root.after(0, self._do_show_from_tray)
+
+    def _do_show_from_tray(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _quit_app(self):
+        if hasattr(self, "tray"):
+            self.tray.stop()
+        self.engine.stop()
+        self.save_callback()
+        self.root.destroy()
 
     def _on_engine_monitor_updated(self, monitor: BaseMonitor):
         self.root.after(0, self._refresh_monitors_list)

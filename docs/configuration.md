@@ -61,6 +61,11 @@ For advanced users or automated configuration scripts, here is the standard sche
     }
   ],
   "default_channel_id": "c-1742445890-default",
+  "settings": {
+    "auto_start_engine": false,
+    "minimize_to_tray": true,
+    "start_minimized": false
+  },
   "monitors": [
     {
       "id": "m-1742445890-stepdown",
@@ -83,13 +88,25 @@ For advanced users or automated configuration scripts, here is the standard sche
       "interval_seconds": 60,
       "channel_id": null,
       "drive": "C:\\",
-      "tier1_gb": 30.0,
-      "tier2_gb": 20.0,
-      "tier3_gb": 10.0
+      "step_down_mode": true,
+      "recovery_margin_gb": 5.0,
+      "tiers": [
+        {"gb": 30.0, "message": "Storage Warning", "priority": 3},
+        {"gb": 20.0, "message": "Critical Warning", "priority": 4},
+        {"gb": 10.0, "message": "Fatal Warning", "priority": 5}
+      ]
     }
   ]
 }
 ```
+
+---
+
+## 📜 Persistent Disk Logging (`logs/sentinel.log`)
+
+ProcessSentinel provides dual-layer logging:
+* **Live In-Memory Buffer**: Displayed directly within the **Live Activity Log** tab in the GUI (last 200 events).
+* **Rotating Disk Log File**: Stored in `logs/sentinel.log` adjacent to the executable or project root. ProcessSentinel uses an automated rotating handler (5 MB max per file, up to 3 backup archives) ensuring complete auditability without unbounded disk growth.
 
 ---
 

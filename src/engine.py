@@ -1,14 +1,23 @@
+import os
 import time
 import threading
+import logging
+from logging.handlers import RotatingFileHandler
 from typing import List, Optional, Callable, Dict, Any
 from datetime import datetime
 
 from channels import ChannelRegistry
 from monitors.base import BaseMonitor
+from config_manager import get_app_directory
 
 class MonitorEngine:
     """Master background engine executing all active monitors."""
-    def __init__(self, channel_registry: ChannelRegistry, monitors: Optional[List[BaseMonitor]] = None):
+    def __init__(
+        self,
+        channel_registry: ChannelRegistry,
+        monitors: Optional[List[BaseMonitor]] = None,
+        log_dir: Optional[str] = None
+    ):
         self.channel_registry = channel_registry
         self.monitors: List[BaseMonitor] = monitors or []
         self.running = False
@@ -23,6 +32,27 @@ class MonitorEngine:
         self.logs: List[Dict[str, Any]] = []
         self.max_logs = 200
 
+        # Persistent rotating disk logging
+        self.log_dir = log_dir or os.path.join(get_app_directory(), "logs")
+        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_file = os.path.join(self.log_dir, "sentinel.log")
+
+        self.logger = logging.getLogger(f"ProcessSentinel.{id(self)}")
+        self.logger.setLevel(logging.DEBUG)
+
+        self._file_handler = RotatingFileHandler(
+            self.log_file,
+            maxBytes=5 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8"
+        )
+        formatter = logging.Formatter(
+            "[%(asctime)s] [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        self._file_handler.setFormatter(formatter)
+        self.logger.addHandler(self._file_handler)
+
     def log(self, message: str, level: str = "info"):
         timestamp = datetime.now().strftime("%H:%M:%S")
         entry = {"time": timestamp, "message": message, "level": level}
@@ -30,11 +60,32 @@ class MonitorEngine:
             self.logs.append(entry)
             if len(self.logs) > self.max_logs:
                 self.logs.pop(0)
+
+        # Write to persistent rotating log file
+        level_map = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "warn": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL
+        }
+        lvl = level_map.get(str(level).lower(), logging.INFO)
+        if self.logger:
+            self.logger.log(lvl, message)
+
         if self.on_log_message:
             try:
                 self.on_log_message(f"[{timestamp}] {message}")
             except Exception:
                 pass
+
+    def close(self):
+        """Cleanly closes file handlers."""
+        if hasattr(self, "_file_handler") and self._file_handler:
+            self._file_handler.close()
+            self.logger.removeHandler(self._file_handler)
+            self._file_handler = None
 
     def start(self):
         started = False

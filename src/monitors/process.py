@@ -40,7 +40,9 @@ class ProcessStepDownMonitor(BaseMonitor):
         click_url: Optional[str] = None,
         markdown_enabled: bool = True,
         step_down_priority: int = 4,
-        step_down_tags: str = "warning,arrow_down"
+        step_down_tags: str = "warning,arrow_down",
+        recovery_notification: bool = False,
+        recovery_message: Optional[str] = None
     ):
         super().__init__(
             name=name,
@@ -52,7 +54,9 @@ class ProcessStepDownMonitor(BaseMonitor):
             tags=tags,
             title_template=title_template,
             click_url=click_url,
-            markdown_enabled=markdown_enabled
+            markdown_enabled=markdown_enabled,
+            recovery_notification=recovery_notification,
+            recovery_message=recovery_message
         )
         self.target = target.strip()
         self.initial_count = max(1, int(initial_count))
@@ -167,7 +171,9 @@ class ProcessStepDownMonitor(BaseMonitor):
             click_url=data.get("click_url"),
             markdown_enabled=data.get("markdown_enabled", True),
             step_down_priority=data.get("step_down_priority", 4),
-            step_down_tags=data.get("step_down_tags", "warning,arrow_down")
+            step_down_tags=data.get("step_down_tags", "warning,arrow_down"),
+            recovery_notification=data.get("recovery_notification", False),
+            recovery_message=data.get("recovery_message")
         )
 
 
@@ -192,7 +198,9 @@ class ProcessInstanceMonitor(BaseMonitor):
         tags: str = "warning,gear",
         title_template: Optional[str] = None,
         click_url: Optional[str] = None,
-        markdown_enabled: bool = True
+        markdown_enabled: bool = True,
+        recovery_notification: bool = False,
+        recovery_message: Optional[str] = None
     ):
         super().__init__(
             name=name,
@@ -204,7 +212,9 @@ class ProcessInstanceMonitor(BaseMonitor):
             tags=tags,
             title_template=title_template,
             click_url=click_url,
-            markdown_enabled=markdown_enabled
+            markdown_enabled=markdown_enabled,
+            recovery_notification=recovery_notification,
+            recovery_message=recovery_message
         )
         self.target = target.strip()
         self.condition = condition
@@ -262,6 +272,10 @@ class ProcessInstanceMonitor(BaseMonitor):
             self.status_text = f"Triggered: {count} instances ({self.condition} {self.threshold})"
             self.status_level = "warning"
         else:
+            if self.alerted and self.recovery_notification:
+                rec_msg = self.recovery_message or f"Process '{self.target}' instance count returned to normal ({count})."
+                rec_title = self.format_title(f"{self.name}: Recovered", target=self.target, count=count, threshold=self.threshold)
+                self.send_recovery_alert(channel_registry, message=rec_msg, title=rec_title, tags="white_check_mark,recycle")
             self.alerted = False
             self.status_text = f"OK: {count} instances active"
             self.status_level = "ok"
@@ -299,5 +313,7 @@ class ProcessInstanceMonitor(BaseMonitor):
             tags=data.get("tags", "warning,gear"),
             title_template=data.get("title_template"),
             click_url=data.get("click_url"),
-            markdown_enabled=data.get("markdown_enabled", True)
+            markdown_enabled=data.get("markdown_enabled", True),
+            recovery_notification=data.get("recovery_notification", False),
+            recovery_message=data.get("recovery_message")
         )

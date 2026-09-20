@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict, Any, Union
 
 from channels import ChannelRegistry, NotificationChannel
 from monitors import create_monitor_from_dict, BaseMonitor
@@ -21,13 +21,78 @@ def get_app_directory() -> str:
 
 CONFIG_FILE = os.path.join(get_app_directory(), "config.json")
 
+DEFAULT_SETTINGS: Dict[str, Any] = {
+    "auto_start_engine": False,
+    "minimize_to_tray": True,
+    "start_minimized": False
+}
+
 class ConfigManager:
-    """Handles object-oriented serialization, deserialization, and legacy migration."""
-    @staticmethod
-    def load_config(filepath: str = CONFIG_FILE) -> Tuple[ChannelRegistry, List[BaseMonitor]]:
+    """Handles object-oriented serialization, deserialization, settings management, and legacy migration."""
+    _current_settings: Dict[str, Any] = dict(DEFAULT_SETTINGS)
+
+    @classmethod
+    def get_settings(cls) -> Dict[str, Any]:
+        """Returns a copy of the current in-memory settings."""
+        return dict(cls._current_settings)
+
+    @classmethod
+    def set_settings(cls, settings: Dict[str, Any]) -> None:
+        """Updates the current in-memory settings dictionary."""
+        cls._current_settings.update(settings)
+
+    @classmethod
+    def load_settings(cls, filepath: str = CONFIG_FILE) -> Dict[str, Any]:
+        """Loads and returns settings from config.json, merged with defaults."""
         if not os.path.exists(filepath):
-            reg, mons = ConfigManager._get_default_setup()
-            ConfigManager.save_config(reg, mons, filepath)
+            return dict(DEFAULT_SETTINGS)
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and "settings" in data and isinstance(data["settings"], dict):
+                merged = {**DEFAULT_SETTINGS, **data["settings"]}
+                cls._current_settings = dict(merged)
+                return merged
+        except Exception:
+            pass
+        return dict(DEFAULT_SETTINGS)
+
+    @classmethod
+    def save_settings(cls, settings: Dict[str, Any], filepath: str = CONFIG_FILE) -> bool:
+        """Saves settings to config.json preserving existing channels and monitors."""
+        cls.set_settings(settings)
+        data: Dict[str, Any] = {}
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data["settings"] = cls.get_settings()
+        if "version" not in data:
+            data["version"] = "2.0"
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            return True
+        except Exception as e:
+            print(f"[ConfigManager] Failed saving settings to {filepath}: {e}")
+            return False
+
+    @classmethod
+    def load_config(
+        cls,
+        filepath: str = CONFIG_FILE,
+        return_settings: bool = False
+    ) -> Union[Tuple[ChannelRegistry, List[BaseMonitor]], Tuple[ChannelRegistry, List[BaseMonitor], Dict[str, Any]]]:
+        if not os.path.exists(filepath):
+            reg, mons = cls._get_default_setup()
+            cls._current_settings = dict(DEFAULT_SETTINGS)
+            cls.save_config(reg, mons, filepath, settings=cls._current_settings)
+            if return_settings:
+                return reg, mons, dict(cls._current_settings)
             return reg, mons
 
         try:
@@ -37,15 +102,26 @@ class ConfigManager:
                 raise ValueError("Root JSON must be an object")
         except Exception as e:
             print(f"[ConfigManager] Config file '{filepath}' missing or broken: {e}. Resetting to defaults.")
-            reg, mons = ConfigManager._get_default_setup()
-            ConfigManager.save_config(reg, mons, filepath)
+            reg, mons = cls._get_default_setup()
+            cls._current_settings = dict(DEFAULT_SETTINGS)
+            cls.save_config(reg, mons, filepath, settings=cls._current_settings)
+            if return_settings:
+                return reg, mons, dict(cls._current_settings)
             return reg, mons
+
+        # Load settings dictionary if present
+        if "settings" in data and isinstance(data["settings"], dict):
+            cls._current_settings = {**DEFAULT_SETTINGS, **data["settings"]}
+        else:
+            cls._current_settings = dict(DEFAULT_SETTINGS)
 
         # Check for legacy v1 format
         if "ntfy_url" in data and "monitors" not in data:
             print("[ConfigManager] Migrating legacy v1 config to v2 format...")
-            reg, mons = ConfigManager._migrate_legacy(data)
-            ConfigManager.save_config(reg, mons, filepath)
+            reg, mons = cls._migrate_legacy(data)
+            cls.save_config(reg, mons, filepath, settings=cls._current_settings)
+            if return_settings:
+                return reg, mons, dict(cls._current_settings)
             return reg, mons
 
         try:
@@ -64,24 +140,38 @@ class ConfigManager:
                     monitors.append(m)
 
             if not monitors:
-                _, default_mons = ConfigManager._get_default_setup()
+                _, default_mons = cls._get_default_setup()
                 monitors = default_mons
 
+            if return_settings:
+                return channel_registry, monitors, dict(cls._current_settings)
             return channel_registry, monitors
         except Exception as e:
             print(f"[ConfigManager] Failed parsing config '{filepath}': {e}. Resetting to default state.")
-            reg, mons = ConfigManager._get_default_setup()
-            ConfigManager.save_config(reg, mons, filepath)
+            reg, mons = cls._get_default_setup()
+            cls._current_settings = dict(DEFAULT_SETTINGS)
+            cls.save_config(reg, mons, filepath, settings=cls._current_settings)
+            if return_settings:
+                return reg, mons, dict(cls._current_settings)
             return reg, mons
 
-    @staticmethod
-    def save_config(channel_registry: ChannelRegistry, monitors: List[BaseMonitor], filepath: str = CONFIG_FILE) -> bool:
+    @classmethod
+    def save_config(
+        cls,
+        channel_registry: ChannelRegistry,
+        monitors: List[BaseMonitor],
+        filepath: str = CONFIG_FILE,
+        settings: Optional[Dict[str, Any]] = None
+    ) -> bool:
         try:
+            if settings is not None:
+                cls.set_settings(settings)
             data = {
                 "version": "2.0",
                 "default_channel_id": channel_registry.default_channel_id,
                 "channels": [c.to_dict() for c in channel_registry.channels],
-                "monitors": [m.to_dict() for m in monitors]
+                "monitors": [m.to_dict() for m in monitors],
+                "settings": cls.get_settings()
             }
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
