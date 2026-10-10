@@ -1,12 +1,12 @@
 {
-    "version":  "2.2.0",
+    "version":  "2.2.1",
     "description":  "Modular rule-based Windows watchdog engine and modern desktop dashboard",
     "homepage":  "https://github.com/zunaidFarouque/ProcessSentinel",
     "license":  "MIT",
     "architecture":  {
                          "64bit":  {
-                                       "url":  "https://github.com/zunaidFarouque/ProcessSentinel/releases/download/v2.2.0/ProcessSentinel-v2.2.0-windows-x64.zip",
-                                       "hash":  "c842085c6786098f0895ca96d9d379c10542b7194c5a889e0c1431aab5ac979e"
+                                       "url":  "https://github.com/zunaidFarouque/ProcessSentinel/releases/download/v2.2.1/ProcessSentinel-v2.2.1-windows-x64.zip",
+                                       "hash":  "41266be80d0c1cd6e0900f48f286e7619126dc3ac64c841d9e9e876a7013c99f"
                                    }
                      },
     "bin":  "ProcessSentinel.exe",
