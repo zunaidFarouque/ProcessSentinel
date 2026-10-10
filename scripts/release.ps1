@@ -134,6 +134,20 @@ if (-not $Force -and -not $DryRun) {
 $zipName = "ProcessSentinel-$tag-windows-x64.zip"
 $zipPath = Join-Path $repoRoot $zipName
 
+# Ensure any running instance is stopped so files/logs are not locked
+$runningProcs = Get-Process -Name "ProcessSentinel" -ErrorAction SilentlyContinue
+if ($runningProcs) {
+    Write-Host "Stopping active ProcessSentinel processes before packaging..." -ForegroundColor Yellow
+    $runningProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
+# Clean any local runtime logs from dist before packaging
+$distLogs = Join-Path $repoRoot "dist\ProcessSentinel\logs"
+if (Test-Path $distLogs) {
+    Remove-Item $distLogs -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "`n[1/6] Packaging portable distribution into '$zipName'..." -ForegroundColor Green
 if (Test-Path $zipPath) {
     Remove-Item $zipPath -Force
