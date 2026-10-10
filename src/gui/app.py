@@ -10,6 +10,7 @@ from config_manager import ConfigManager, CONFIG_FILE
 from engine import MonitorEngine
 from monitors import create_monitor_from_dict
 from monitors.base import BaseMonitor
+from monitors.process import ProcessStepDownMonitor
 from gui.dialogs import ChannelDialog, MonitorDialog
 from gui.tray import Win32SystemTray
 
@@ -50,9 +51,29 @@ class SentinelGUI:
         self._refresh_monitors_list()
         self._refresh_channels_list()
 
+        # Center window and bring directly to foreground
+        self._center_and_focus()
+
         # Auto-start engine if configured
         if self.settings.get("auto_start_engine", False):
             self.root.after(400, self._toggle_engine)
+
+    def _center_and_focus(self):
+        try:
+            self.root.update_idletasks()
+            w, h = 960, 760
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            x = max(0, (sw - w) // 2)
+            y = max(0, (sh - h) // 2)
+            self.root.geometry(f"{w}x{h}+{x}+{y}")
+            self.root.deiconify()
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+            self.root.after_idle(lambda: self.root.attributes("-topmost", False))
+            self.root.focus_force()
+        except Exception:
+            pass
 
     def _build_main_ui(self):
         # Top Header Bar
@@ -185,6 +206,10 @@ class SentinelGUI:
         chan_text = f"📡 {target_chan.name}" + (" [Default]" if is_default else "")
         ctk.CTkLabel(m_row, text=chan_text, font=("Segoe UI", 11), text_color="gray60").pack(side="left", padx=(0, 15))
 
+        target_summary = self._get_monitor_target_summary(mon)
+        if target_summary:
+            ctk.CTkLabel(m_row, text=target_summary, font=("Segoe UI", 11, "bold"), text_color="#64b5f6").pack(side="left", padx=(0, 15))
+
         if mon.tags:
             ctk.CTkLabel(m_row, text=f"🏷 {mon.tags}", font=("Segoe UI", 11), text_color="gray60").pack(side="left")
 
@@ -231,9 +256,55 @@ class SentinelGUI:
         def on_del():
             if messagebox.askyesno("Confirm Delete", f"Delete monitor '{mon.name}'?"):
                 self.engine.remove_monitor(mon.id)
+                self.save_callback()
                 self._refresh_monitors_list()
         btn_del = ctk.CTkButton(act_row, text="🗑 Delete", width=75, height=26, fg_color="#8b1e1e", hover_color="#ad2323", command=on_del)
         btn_del.pack(side="right")
+
+    def _get_monitor_target_summary(self, mon: BaseMonitor) -> str:
+        if isinstance(mon, ProcessStepDownMonitor) or mon.monitor_type == "ProcessStepDown":
+            cnt = getattr(mon, "initial_count", 3)
+            tgt = getattr(mon, "target", "")
+            return f"🎯 {tgt} (target: {cnt} instances)"
+        elif mon.monitor_type == "ProcessInstance":
+            thresh = getattr(mon, "threshold", 1)
+            cond = getattr(mon, "condition", "below")
+            target = getattr(mon, "target", "")
+            return f"🎯 {target} ({cond} {thresh})"
+        elif mon.monitor_type == "StorageMultiTier":
+            drive = getattr(mon, "drive", "")
+            return f"💾 Drive {drive}"
+        elif mon.monitor_type == "ResourceMonitor":
+            target = getattr(mon, "target", "")
+            metric = getattr(mon, "metric", "cpu").upper()
+            thresh = getattr(mon, "threshold", 0)
+            cond = getattr(mon, "condition", "above")
+            return f"🎯 {target} ({metric} {cond} {thresh})"
+        elif mon.monitor_type == "IOMonitor":
+            paths = getattr(mon, "paths", [])
+            stall = getattr(mon, "stall_minutes", 0)
+            return f"📁 {len(paths)} watch paths ({stall}m stall)"
+        elif mon.monitor_type == "HTTPEndpoint":
+            url = getattr(mon, "url", "")
+            short_url = url if len(url) <= 30 else url[:27] + "..."
+            return f"🌐 {short_url}"
+        elif mon.monitor_type == "LocalPort":
+            host = getattr(mon, "host", "127.0.0.1")
+            port = getattr(mon, "port", 80)
+            return f"🔌 {host}:{port}"
+        elif mon.monitor_type == "GPUMonitor":
+            g_idx = getattr(mon, "gpu_index", 0)
+            metric = getattr(mon, "metric", "")
+            thresh = getattr(mon, "threshold", 0)
+            return f"🎮 GPU {g_idx} ({metric} > {thresh})"
+        elif mon.monitor_type == "LogScanner":
+            fpath = getattr(mon, "file_path", "")
+            fname = os.path.basename(fpath) if fpath else "log"
+            return f"📄 {fname}"
+        elif mon.monitor_type == "PowerMonitor":
+            b_thresh = getattr(mon, "battery_threshold", None)
+            return f"⚡ Battery (≤{b_thresh}%)" if b_thresh else "⚡ AC Power"
+        return ""
 
     # -------------------------------------------------------------
     # TAB 2: CHANNELS
@@ -316,6 +387,7 @@ class SentinelGUI:
                 def del_ch(cid=ch.id, cname=ch.name):
                     if messagebox.askyesno("Confirm Delete", f"Delete channel '{cname}'?"):
                         self.channel_registry.remove_channel(cid)
+                        self.save_callback()
                         self._refresh_channels_list()
                         self._refresh_monitors_list()
                 ctk.CTkButton(btn_frame, text="🗑 Delete", width=65, height=28, fg_color="#8b1e1e", hover_color="#ad2323", command=del_ch).pack(side="left", padx=4)
@@ -417,21 +489,23 @@ class SentinelGUI:
     def _open_add_monitor_dialog(self):
         def on_save(new_mon):
             self.engine.add_monitor(new_mon)
+            self.save_callback()
+            self.engine.check_monitor_now(new_mon.id)
             self._refresh_monitors_list()
         MonitorDialog(self.root, self.channel_registry, monitor=None, on_save=on_save)
 
     def _open_edit_monitor_dialog(self, mon: BaseMonitor):
         def on_save(updated_mon):
-            for i, m in enumerate(self.engine.monitors):
-                if m.id == updated_mon.id:
-                    self.engine.monitors[i] = updated_mon
-                    break
+            self.engine.update_monitor(updated_mon)
+            self.save_callback()
+            self.engine.check_monitor_now(updated_mon.id)
             self._refresh_monitors_list()
         MonitorDialog(self.root, self.channel_registry, monitor=mon, on_save=on_save)
 
     def _open_add_channel_dialog(self):
         def on_save(name, url, token, channel_type="ntfy", chat_id=None, _=None):
             self.channel_registry.add_channel(name, url, auth_token=token, channel_type=channel_type, chat_id=chat_id)
+            self.save_callback()
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=None, on_save=on_save)
@@ -443,6 +517,7 @@ class SentinelGUI:
             channel.auth_token = token
             channel.channel_type = channel_type
             channel.chat_id = chat_id
+            self.save_callback()
             self._refresh_channels_list()
             self._refresh_monitors_list()
         ChannelDialog(self.root, channel=channel, on_save=on_save)
@@ -455,6 +530,8 @@ class SentinelGUI:
 
         def on_save(new_mon):
             self.engine.add_monitor(new_mon)
+            self.save_callback()
+            self.engine.check_monitor_now(new_mon.id)
             self._refresh_monitors_list()
 
         MonitorDialog(self.root, self.channel_registry, monitor=cloned, on_save=on_save)
@@ -500,9 +577,14 @@ class SentinelGUI:
         self.root.after(0, self._do_show_from_tray)
 
     def _do_show_from_tray(self):
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+            self.root.after_idle(lambda: self.root.attributes("-topmost", False))
+            self.root.focus_force()
+        except Exception:
+            pass
 
     def _quit_app(self):
         if hasattr(self, "tray"):

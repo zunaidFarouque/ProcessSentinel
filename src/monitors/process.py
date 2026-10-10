@@ -76,11 +76,17 @@ class ProcessStepDownMonitor(BaseMonitor):
         target_lower = self.target.lower()
         if self.match_mode == "window_title" and HAS_WIN32:
             matched_hwnds = []
+            target_no_ext = target_lower[:-4] if target_lower.endswith(".exe") else target_lower
+            target_compact = target_no_ext.replace(" ", "")
             def enum_cb(hwnd, _):
                 if win32gui.IsWindowVisible(hwnd):
                     title = win32gui.GetWindowText(hwnd).strip().lower()
-                    if title and target_lower in title:
-                        matched_hwnds.append(hwnd)
+                    if title:
+                        title_compact = title.replace(" ", "")
+                        if (target_lower in title or 
+                            target_no_ext in title or 
+                            (target_compact and target_compact in title_compact)):
+                            matched_hwnds.append(hwnd)
             win32gui.EnumWindows(enum_cb, None)
             return len(matched_hwnds)
         else:
@@ -242,11 +248,17 @@ class ProcessInstanceMonitor(BaseMonitor):
         target_lower = self.target.lower()
         if self.match_mode == "window_title" and HAS_WIN32:
             matched = []
+            target_no_ext = target_lower[:-4] if target_lower.endswith(".exe") else target_lower
+            target_compact = target_no_ext.replace(" ", "")
             def cb(hwnd, _):
                 if win32gui.IsWindowVisible(hwnd):
                     t = win32gui.GetWindowText(hwnd).strip().lower()
-                    if t and target_lower in t:
-                        matched.append(hwnd)
+                    if t:
+                        title_compact = t.replace(" ", "")
+                        if (target_lower in t or 
+                            target_no_ext in t or 
+                            (target_compact and target_compact in title_compact)):
+                            matched.append(hwnd)
             win32gui.EnumWindows(cb, None)
             return len(matched)
         else:

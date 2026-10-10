@@ -131,6 +131,16 @@ class MonitorEngine:
             self.monitors.append(monitor)
         self.log(f"Added monitor '{monitor.name}' ({monitor.display_name}).")
 
+    def update_monitor(self, monitor: BaseMonitor):
+        with self._lock:
+            for i, m in enumerate(self.monitors):
+                if m.id == monitor.id:
+                    self.monitors[i] = monitor
+                    break
+            else:
+                self.monitors.append(monitor)
+        self.log(f"Updated monitor '{monitor.name}' ({monitor.display_name}).")
+
     def remove_monitor(self, monitor_id: str):
         with self._lock:
             self.monitors = [m for m in self.monitors if m.id != monitor_id]

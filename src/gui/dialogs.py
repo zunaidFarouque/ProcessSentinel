@@ -38,6 +38,8 @@ class ChannelDialog(ctk.CTkToplevel):
         self.reverse_type_options = {v: k for k, v in self.type_options.items()}
 
         self._build_ui()
+        self.bind("<Return>", lambda e: self._save())
+        self.bind("<Escape>", lambda e: self.destroy())
 
     def _build_ui(self):
         pad = {"padx": 15, "pady": 4}
@@ -222,19 +224,46 @@ class MonitorDialog(ctk.CTkToplevel):
         self.on_save = on_save
 
         self.title("Edit Monitor" if monitor else "Add New Monitor")
-        self.geometry("640x760")
+        self.geometry("640x680")
         self.resizable(True, True)
-        self.minsize(580, 600)
+        self.minsize(560, 480)
         self.transient(parent)
         self.grab_set()
 
         self._build_ui()
+        self.bind("<Return>", lambda e: self._save())
+        self.bind("<Escape>", lambda e: self.destroy())
 
     def _build_ui(self):
         pad = {"padx": 15, "pady": 5}
 
-        scroll = ctk.CTkScrollableFrame(self, width=600, height=660)
-        scroll.pack(fill="both", expand=True, padx=10, pady=10)
+        # Pin bottom action buttons FIRST so they are ALWAYS visible regardless of scaling / resize
+        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
+        btn_frame.pack(side="bottom", fill="x", padx=15, pady=10)
+        self.save_btn = ctk.CTkButton(
+            btn_frame,
+            text="💾 Save Monitor",
+            command=self._save,
+            width=140,
+            height=32,
+            font=("Segoe UI", 12, "bold"),
+            fg_color="#1f6aa5",
+            hover_color="#144f7a"
+        )
+        self.save_btn.pack(side="right", padx=5)
+        ctk.CTkButton(
+            btn_frame,
+            text="Cancel",
+            command=self.destroy,
+            fg_color="gray",
+            hover_color="#5a6268",
+            width=90,
+            height=32
+        ).pack(side="right", padx=5)
+
+        # Scrollable container fills space above the bottom bar
+        scroll = ctk.CTkScrollableFrame(self, width=600)
+        scroll.pack(side="top", fill="both", expand=True, padx=10, pady=(10, 0))
         self.scroll = scroll
 
         # 1. Name
@@ -347,11 +376,6 @@ class MonitorDialog(ctk.CTkToplevel):
         self.notif_accordion.pack(fill="x", padx=15, pady=(10, 8))
         self._build_accordion_content()
 
-        # 7. Bottom Dialog Buttons
-        btn_frame = ctk.CTkFrame(self, fg_color="transparent")
-        btn_frame.pack(fill="x", padx=15, pady=10)
-        ctk.CTkButton(btn_frame, text="Save Monitor", command=self._save, width=140).pack(side="right", padx=5)
-        ctk.CTkButton(btn_frame, text="Cancel", command=self.destroy, fg_color="gray", width=90).pack(side="right", padx=5)
 
     def _build_accordion_content(self):
         container = self.notif_accordion.content_frame
@@ -678,14 +702,16 @@ class MonitorDialog(ctk.CTkToplevel):
             self.target_entry.pack(anchor="w")
             if m: self.target_entry.insert(0, m.target)
 
-            ctk.CTkLabel(self.dynamic_frame, text="Initial Instance/Window Count:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
+            ctk.CTkLabel(self.dynamic_frame, text="Target / Expected Instance Count (High-Watermark):", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
             self.init_count_entry = ctk.CTkEntry(self.dynamic_frame, width=120)
             self.init_count_entry.pack(anchor="w")
             self.init_count_entry.insert(0, str(m.initial_count if m else 3))
+            ctk.CTkLabel(self.dynamic_frame, text="Alerts trigger each time instances drop below this baseline (e.g. 3 → 2 → 1 → 0).", font=("Segoe UI", 10), text_color="gray60").pack(anchor="w", pady=(2, 2))
 
             ctk.CTkLabel(self.dynamic_frame, text="Match Mode:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
             self.match_mode_var = ctk.StringVar(value=m.match_mode if m else "window_title")
             ctk.CTkOptionMenu(self.dynamic_frame, values=["window_title", "process_name"], variable=self.match_mode_var).pack(anchor="w")
+            ctk.CTkLabel(self.dynamic_frame, text="• window_title: Matches visible window titles (e.g. ArcGIS Pro, Word)\n• process_name: Matches processes in Task Manager (e.g. python.exe, main.exe)", font=("Segoe UI", 10), text_color="gray60", justify="left").pack(anchor="w", pady=(2, 2))
 
             ctk.CTkLabel(self.dynamic_frame, text="Step-Down Message Template:", font=("Segoe UI", 12, "bold")).pack(anchor="w", pady=(10, 2))
             self.step_msg_entry = ctk.CTkEntry(self.dynamic_frame, width=540)
@@ -948,6 +974,7 @@ class MonitorDialog(ctk.CTkToplevel):
         channel_id = self.channel_map.get(self.channel_var.get())
         selected_code = self.type_options[self.type_var.get()]
         mon_id = self.monitor.id if self.monitor else None
+        enabled = self.monitor.enabled if self.monitor else True
 
         # Notification Customization Values
         prio = self.priority_map[self.prio_var.get()]
@@ -969,6 +996,13 @@ class MonitorDialog(ctk.CTkToplevel):
                 target = self.target_entry.get().strip()
                 if not target: raise ValueError("Target process/window name is required.")
                 init_cnt = int(self.init_count_entry.get().strip())
+                if init_cnt < 1: raise ValueError("Target instance count must be at least 1.")
+
+                # If initial count was changed, reset step-down tracking so it begins fresh from the new baseline
+                existing_alerted = list(self.monitor.alerted_counts) if (self.monitor and hasattr(self.monitor, "alerted_counts") and hasattr(self.monitor, "initial_count") and self.monitor.initial_count == init_cnt) else []
+                step_prio = getattr(self.monitor, "step_down_priority", 4) if self.monitor else 4
+                step_tags = getattr(self.monitor, "step_down_tags", "warning,arrow_down") if self.monitor else "warning,arrow_down"
+
                 new_mon = ProcessStepDownMonitor(
                     name=name,
                     target=target,
@@ -978,12 +1012,16 @@ class MonitorDialog(ctk.CTkToplevel):
                     critical_message=self.crit_msg_entry.get().strip(),
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
+                    alerted_counts=existing_alerted,
                     priority=prio,
                     tags=custom_tags or "skull,rotating_light",
                     title_template=custom_title,
                     click_url=custom_click,
                     markdown_enabled=markdown_enabled,
+                    step_down_priority=step_prio,
+                    step_down_tags=step_tags,
                     recovery_notification=recovery_notif,
                     action_command=action_cmd,
                     action_timeout=action_timeout
@@ -1003,6 +1041,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "warning,gear",
@@ -1028,6 +1067,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "warning,hourglass_done",
@@ -1058,6 +1098,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     tiers=tiers,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "floppy_disk",
@@ -1084,6 +1125,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags,
@@ -1107,6 +1149,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "file_folder,warning",
@@ -1130,6 +1173,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "globe_with_meridians,warning",
@@ -1152,6 +1196,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "electric_plug,warning",
@@ -1176,6 +1221,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or ("fire,warning" if self.gpu_metric_var.get() == "temperature" else "warning,bar_chart"),
@@ -1202,6 +1248,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "page_facing_up,warning",
@@ -1224,6 +1271,7 @@ class MonitorDialog(ctk.CTkToplevel):
                     message=msg,
                     interval_seconds=interval,
                     channel_id=channel_id,
+                    enabled=enabled,
                     monitor_id=mon_id,
                     priority=prio,
                     tags=custom_tags or "battery,warning",
